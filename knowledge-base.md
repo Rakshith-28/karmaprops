@@ -1,7 +1,7 @@
 # Property Knowledge Base
 
 ## Property Overview
-- **Name:** Sunrise Apartments
+- **Name:** Karma Properties
 - **Address:** 123 Main Street, Austin, TX 78701
 - **Type:** Multi-family apartment complex
 - **Total Units:** 24
