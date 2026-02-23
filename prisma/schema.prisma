@@ -13,7 +13,55 @@ model Message {
   toPhone         String
   incomingMessage String
   aiReply         String?
-  status          String   @default("pending")  // pending, approved, rejected, sent
+  status          String   @default("pending")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Property {
+  id              String   @id
+  name            String
+  description     String?
+  street1         String?
+  street2         String?
+  city            String?
+  state           String?
+  zip             String?
+  country         String?
+  type            String?
+  class           String?
+  active          Boolean  @default(true)
+  amenities       String[]
+  petPolicySmallDogs    String?
+  petPolicyLargeDogs    String?
+  petPolicyCats         String?
+  numActiveUnits  Int?
+  rawData         Json?
+  units           Unit[]
+  syncedAt        DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Unit {
+  id              String   @id
+  name            String
+  propertyId      String
+  property        Property @relation(fields: [propertyId], references: [id])
+  street1         String?
+  city            String?
+  state           String?
+  zip             String?
+  beds            Int?
+  baths           Float?
+  size            Int?
+  marketRent      Float?
+  description     String?
+  amenities       String[]
+  active          Boolean  @default(true)
+  inEviction      Boolean  @default(false)
+  rawData         Json?
+  syncedAt        DateTime @default(now())
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

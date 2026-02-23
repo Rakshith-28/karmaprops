@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     const fromPhone = event.data.object.from;
     const toPhone = event.data.object.to;
 
-    const reply = await getResponse(incomingMessage);
+    const reply = await getResponse(incomingMessage, fromPhone);
 
     // Save as pending — waits for your approval before sending
     const message = await prisma.message.create({
