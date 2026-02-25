@@ -61,7 +61,12 @@ export default function ChatPage() {
           {messages.map((msg, i) => (
             <div key={i} className={`chat-bubble ${msg.role}`}>
               <div className="label">{msg.role === "user" ? "You" : "Assistant"}</div>
-              {msg.content}
+              {msg.content.split("\n").map((line, j) => (
+  <span key={j}>
+    {line}
+    <br />
+  </span>
+))}
             </div>
           ))}
           {loading && (
