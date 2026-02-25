@@ -118,7 +118,7 @@ async function buildContext(message: string) {
 
       const propertyText = properties.map((p: any) => formatProperty(p)).join("\n---\n");
 
-      const summary = `Total properties managed: 45 | Showing: ${properties.length} matching properties`;
+      const summary = `We manage 45 properties total across multiple cities. Below are some of our current listings:`;
 
       return `${summary}\n\n${propertyText}`;
     } catch (error: any) {
