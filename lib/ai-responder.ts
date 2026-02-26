@@ -365,7 +365,7 @@ export async function getResponse(message: string, fromPhone?: string) {
 
   try {
     const result = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: "llama-3.1-8b-instant",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: message },
