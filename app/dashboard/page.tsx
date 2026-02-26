@@ -10,6 +10,8 @@ interface Message {
   incomingMessage: string;
   aiReply: string | null;
   status: string;
+  callerType: string | null;
+  callerName: string | null;
   createdAt: string;
 }
 
@@ -65,6 +67,28 @@ export default function Dashboard() {
   const pending = messages.filter((m) => m.status === "pending");
   const handled = messages.filter((m) => m.status !== "pending");
 
+  function CallerBadge({ msg }: { msg: Message }) {
+    const isTenant = msg.callerType === "tenant";
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+          padding: "2px 8px",
+          borderRadius: 12,
+          fontSize: 12,
+          fontWeight: 600,
+          background: isTenant ? "#dbeafe" : "#fef3c7",
+          color: isTenant ? "#1e40af" : "#92400e",
+        }}
+      >
+        {isTenant ? "🏠 Tenant" : "🔍 Prospect"}
+        {msg.callerName && ` · ${msg.callerName}`}
+      </span>
+    );
+  }
+
   return (
     <>
       <Nav />
@@ -97,7 +121,10 @@ export default function Dashboard() {
               pending.map((msg) => (
                 <div key={msg.id} className="message-card pending">
                   <div className="message-meta">
-                    <span className="phone">📱 {msg.fromPhone}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span className="phone">📱 {msg.fromPhone}</span>
+                      <CallerBadge msg={msg} />
+                    </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span className="badge badge-pending">Pending</span>
                       <span className="time">
@@ -107,7 +134,7 @@ export default function Dashboard() {
                   </div>
 
                   <div className="message-content">
-                    <label>Prospect said</label>
+                    <label>{msg.callerType === "tenant" ? "Tenant said" : "Prospect said"}</label>
                     <p>{msg.incomingMessage}</p>
                   </div>
 
@@ -157,7 +184,10 @@ export default function Dashboard() {
               handled.map((msg) => (
                 <div key={msg.id} className={`message-card ${msg.status}`}>
                   <div className="message-meta">
-                    <span className="phone">📱 {msg.fromPhone}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span className="phone">📱 {msg.fromPhone}</span>
+                      <CallerBadge msg={msg} />
+                    </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span className={`badge badge-${msg.status}`}>{msg.status}</span>
                       <span className="time">
@@ -166,7 +196,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="message-content">
-                    <label>Prospect said</label>
+                    <label>{msg.callerType === "tenant" ? "Tenant said" : "Prospect said"}</label>
                     <p>{msg.incomingMessage}</p>
                   </div>
                   <div className="message-content">

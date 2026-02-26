@@ -17,38 +17,40 @@ model Message {
   status          String   @default("pending")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  callerType      String?
+  callerName      String?
+  tenantId        String?
 }
 
 model Property {
-  id                    String   @id
-  name                  String
-  description           String?
-  street1               String?
-  street2               String?
-  city                  String?
-  state                 String?
-  zip                   String?
-  country               String?
-  type                  String?
-  class                 String?
-  active                Boolean  @default(true)
-  amenities             String[]
-  petPolicySmallDogs    String?
-  petPolicyLargeDogs    String?
-  petPolicyCats         String?
-  numActiveUnits        Int?
-  rawData               Json?
-  units                 Unit[]
-  syncedAt              DateTime @default(now())
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                 String   @id
+  name               String
+  description        String?
+  street1            String?
+  street2            String?
+  city               String?
+  state              String?
+  zip                String?
+  country            String?
+  type               String?
+  class              String?
+  active             Boolean  @default(true)
+  amenities          String[]
+  petPolicySmallDogs String?
+  petPolicyLargeDogs String?
+  petPolicyCats      String?
+  numActiveUnits     Int?
+  rawData            Json?
+  syncedAt           DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  units              Unit[]
 }
 
 model Unit {
   id          String   @id
   name        String
   propertyId  String
-  property    Property @relation(fields: [propertyId], references: [id])
   street1     String?
   city        String?
   state       String?
@@ -65,68 +67,72 @@ model Unit {
   syncedAt    DateTime @default(now())
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  property    Property @relation(fields: [propertyId], references: [id])
 }
 
-// ─── New Models ───────────────────────────────────────────────────────────────
-
 model Tenant {
-  id          String   @id                   // DoorLoop tenant ID
+  id          String   @id
   firstName   String?
   lastName    String?
   email       String?
-  phone       String?                         // normalized to E.164 for identity matching
-  mobilePhone String?                         // secondary number, also normalized
-  type        String?                         // LEASE_TENANT or PROSPECT_TENANT
-  status      String?                         // active, past, prospect
+  phone       String?
+  mobilePhone String?
+  type        String?
+  status      String?
   notes       String?
   rawData     Json?
   syncedAt    DateTime @default(now())
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
   leases      Lease[]
   tasks       Task[]
 }
 
 model Lease {
-  id              String    @id              // DoorLoop lease ID
+  id              String    @id
   tenantId        String?
-  tenant          Tenant?   @relation(fields: [tenantId], references: [id])
-  propertyId      String?                    // matches Property.id
-  unitId          String?                    // matches Unit.id
-  status          String?                    // ACTIVE, EXPIRED, TERMINATED
+  propertyId      String?
+  unitId          String?
+  status          String?
   startDate       DateTime?
   endDate         DateTime?
   monthlyRent     Float?
   securityDeposit Float?
-  rentDueDay      Int?                       // day of month rent is due e.g. 1, 15
+  rentDueDay      Int?
   lateFee         Float?
-  leaseType       String?                    // FIXED, MONTH_TO_MONTH
-  renewalStatus   String?                    // AUTO_RENEW, PENDING, NOT_RENEWING
+  leaseType       String?
+  renewalStatus   String?
   moveInDate      DateTime?
   moveOutDate     DateTime?
   rawData         Json?
   syncedAt        DateTime  @default(now())
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  tenant          Tenant?   @relation(fields: [tenantId], references: [id])
 }
 
 model Task {
-  id          String    @id                  // DoorLoop task ID
+  id          String    @id
   tenantId    String?
-  tenant      Tenant?   @relation(fields: [tenantId], references: [id])
-  propertyId  String?                        // matches Property.id
-  unitId      String?                        // matches Unit.id
-  type        String?                        // MAINTENANCE, GENERAL, etc.
+  propertyId  String?
+  unitId      String?
+  type        String?
   title       String?
   description String?
-  status      String?                        // OPEN, IN_PROGRESS, COMPLETED, CANCELLED
-  priority    String?                        // LOW, MEDIUM, HIGH, URGENT
+  status      String?
+  priority    String?
   dueDate     DateTime?
   completedAt DateTime?
-  assignedTo  String?                        // name of the assigned team member
+  assignedTo  String?
   rawData     Json?
   syncedAt    DateTime  @default(now())
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id])
+}
+
+model playing_with_neon {
+  id    Int    @id @default(autoincrement())
+  name  String
+  value Float? @db.Real
 }
