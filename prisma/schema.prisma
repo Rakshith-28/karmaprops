@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Message {
@@ -19,49 +20,113 @@ model Message {
 }
 
 model Property {
-  id              String   @id
-  name            String
-  description     String?
-  street1         String?
-  street2         String?
-  city            String?
-  state           String?
-  zip             String?
-  country         String?
-  type            String?
-  class           String?
-  active          Boolean  @default(true)
-  amenities       String[]
+  id                    String   @id
+  name                  String
+  description           String?
+  street1               String?
+  street2               String?
+  city                  String?
+  state                 String?
+  zip                   String?
+  country               String?
+  type                  String?
+  class                 String?
+  active                Boolean  @default(true)
+  amenities             String[]
   petPolicySmallDogs    String?
   petPolicyLargeDogs    String?
   petPolicyCats         String?
-  numActiveUnits  Int?
-  rawData         Json?
-  units           Unit[]
-  syncedAt        DateTime @default(now())
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  numActiveUnits        Int?
+  rawData               Json?
+  units                 Unit[]
+  syncedAt              DateTime @default(now())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 model Unit {
-  id              String   @id
-  name            String
-  propertyId      String
-  property        Property @relation(fields: [propertyId], references: [id])
-  street1         String?
-  city            String?
-  state           String?
-  zip             String?
-  beds            Int?
-  baths           Float?
-  size            Int?
-  marketRent      Float?
-  description     String?
-  amenities       String[]
-  active          Boolean  @default(true)
-  inEviction      Boolean  @default(false)
+  id          String   @id
+  name        String
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id])
+  street1     String?
+  city        String?
+  state       String?
+  zip         String?
+  beds        Int?
+  baths       Float?
+  size        Int?
+  marketRent  Float?
+  description String?
+  amenities   String[]
+  active      Boolean  @default(true)
+  inEviction  Boolean  @default(false)
+  rawData     Json?
+  syncedAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── New Models ───────────────────────────────────────────────────────────────
+
+model Tenant {
+  id          String   @id                   // DoorLoop tenant ID
+  firstName   String?
+  lastName    String?
+  email       String?
+  phone       String?                         // normalized to E.164 for identity matching
+  mobilePhone String?                         // secondary number, also normalized
+  type        String?                         // LEASE_TENANT or PROSPECT_TENANT
+  status      String?                         // active, past, prospect
+  notes       String?
+  rawData     Json?
+  syncedAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  leases      Lease[]
+  tasks       Task[]
+}
+
+model Lease {
+  id              String    @id              // DoorLoop lease ID
+  tenantId        String?
+  tenant          Tenant?   @relation(fields: [tenantId], references: [id])
+  propertyId      String?                    // matches Property.id
+  unitId          String?                    // matches Unit.id
+  status          String?                    // ACTIVE, EXPIRED, TERMINATED
+  startDate       DateTime?
+  endDate         DateTime?
+  monthlyRent     Float?
+  securityDeposit Float?
+  rentDueDay      Int?                       // day of month rent is due e.g. 1, 15
+  lateFee         Float?
+  leaseType       String?                    // FIXED, MONTH_TO_MONTH
+  renewalStatus   String?                    // AUTO_RENEW, PENDING, NOT_RENEWING
+  moveInDate      DateTime?
+  moveOutDate     DateTime?
   rawData         Json?
-  syncedAt        DateTime @default(now())
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  syncedAt        DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Task {
+  id          String    @id                  // DoorLoop task ID
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id])
+  propertyId  String?                        // matches Property.id
+  unitId      String?                        // matches Unit.id
+  type        String?                        // MAINTENANCE, GENERAL, etc.
+  title       String?
+  description String?
+  status      String?                        // OPEN, IN_PROGRESS, COMPLETED, CANCELLED
+  priority    String?                        // LOW, MEDIUM, HIGH, URGENT
+  dueDate     DateTime?
+  completedAt DateTime?
+  assignedTo  String?                        // name of the assigned team member
+  rawData     Json?
+  syncedAt    DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }

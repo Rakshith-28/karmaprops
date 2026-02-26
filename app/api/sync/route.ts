@@ -5,7 +5,7 @@ export async function POST() {
     const results = await syncAll();
     return Response.json({
       success: true,
-      message: `Synced ${results.properties} properties and ${results.units} units`,
+      message: `Synced ${results.properties} properties, ${results.units} units, ${results.tenants} tenants, ${results.leases} leases, ${results.tasks} tasks`,
       ...results,
     });
   } catch (error: any) {
