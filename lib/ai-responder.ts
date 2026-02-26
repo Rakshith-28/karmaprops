@@ -1,5 +1,6 @@
 import Groq from "groq-sdk";
 import { prisma } from "@/lib/prisma";
+import { getQuoMessages, formatQuoHistory } from "@/lib/quo";
 
 type PropertyUnit = {
   name: string;
@@ -220,27 +221,44 @@ Address: ${propertyInfo.property?.street1 || ""}, ${propertyInfo.property?.city 
 }
 
 // ─── Get conversation history ───
+// ─── Get conversation history (KarmaProps DB + Quo/OpenPhone) ───
 async function getConversationHistory(phone: string) {
+  let history = "";
+
+  // 1. Try fetching from Quo/OpenPhone (old + manual conversations)
   try {
-    const messages = await prisma.message.findMany({
+    const quoMessages = await getQuoMessages(phone, 30);
+    const quoHistory = formatQuoHistory(quoMessages, process.env.QUO_FROM_NUMBER || "");
+
+    if (quoHistory) {
+      history += quoHistory;
+      console.log(`[HISTORY] Loaded ${quoMessages.length} messages from Quo for ${phone}`);
+    }
+  } catch (error) {
+    console.warn("Failed to load Quo history:", error);
+  }
+
+  // 2. Also load KarmaProps DB messages (AI-generated ones)
+  try {
+    const dbMessages = await prisma.message.findMany({
       where: { fromPhone: phone },
       orderBy: { createdAt: "asc" },
       take: 20,
     });
 
-    if (messages.length === 0) return "";
+    if (dbMessages.length > 0) {
+      const dbHistory = dbMessages.map((m: ConversationMessage) =>
+        `Them: ${m.incomingMessage}\nYou (Alex): ${m.aiReply || "(no reply sent)"}`
+      ).join("\n");
 
-    const history = messages.map((m: ConversationMessage) =>
-      `Prospect: ${m.incomingMessage}\nYou: ${m.aiReply || "(no reply sent)"}`
-    ).join("\n");
-
-    return `\nPREVIOUS CONVERSATION WITH THIS PERSON:\n${history}\n`;
+      history += `\nRECENT KARMAPROPS MESSAGES:\n${dbHistory}\n`;
+    }
   } catch (error) {
-    console.warn("Failed to load conversation history:", error);
-    return "";
+    console.warn("Failed to load DB history:", error);
   }
-}
 
+  return history;
+}
 // ─── System prompts ───
 function getProspectSystemPrompt(propertyContext: string, conversationHistory: string) {
   return `You are a real human leasing agent named Alex who works at KarmaProps Property Management. You respond to rental prospects via text message exactly like a knowledgeable, friendly, and helpful real estate professional would.
