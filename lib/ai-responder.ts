@@ -353,7 +353,9 @@ NEVER DO:
 - Never ignore their open maintenance requests if relevant
 - Never be dismissive about maintenance concerns
 - If you don't have the info, say "Let me look into that and get back to you shortly!"
-- Never share other tenants' information`;
+- Never share other tenants' information
+- CRITICAL: If the data says "OPEN MAINTENANCE REQUESTS: None", do NOT reference any previous maintenance requests. You have NO record of any prior requests — do not invent or assume any exist.
+- Only reference specific details (dates, request types, amounts) if they appear EXACTLY in the tenant data above. If the data doesn't contain it, don't mention it.`;
 }
 
 // ─── Main export: get AI response ───
