@@ -70,7 +70,7 @@ model Unit {
   property    Property @relation(fields: [propertyId], references: [id])
 }
 
-model Tenant {
+model People {
   id          String   @id
   firstName   String?
   lastName    String?
@@ -86,6 +86,8 @@ model Tenant {
   updatedAt   DateTime @updatedAt
   leases      Lease[]
   tasks       Task[]
+
+   @@map("People")
 }
 
 model Lease {
@@ -108,7 +110,7 @@ model Lease {
   syncedAt        DateTime  @default(now())
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-  tenant          Tenant?   @relation(fields: [tenantId], references: [id])
+  tenant          People?   @relation(fields: [tenantId], references: [id])
 }
 
 model Task {
@@ -128,7 +130,7 @@ model Task {
   syncedAt    DateTime  @default(now())
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  tenant      Tenant?   @relation(fields: [tenantId], references: [id])
+  tenant          People?   @relation(fields: [tenantId], references: [id])
 }
 
 model playing_with_neon {

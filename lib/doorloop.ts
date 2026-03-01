@@ -16,9 +16,22 @@ async function doorloopFetch(endpoint: string) {
   return res.json();
 }
 
+// ─── Fetch all records using page_size parameter ───
+async function doorloopFetchAll(endpoint: string): Promise<any[]> {
+  const separator = endpoint.includes("?") ? "&" : "?";
+  const url = `${endpoint}${separator}page_size=1000`;
+  console.log(`[SYNC] Fetching: ${url}`);
+
+  const data = await doorloopFetch(url);
+  const records = data.data || data;
+
+  console.log(`[SYNC] Got ${Array.isArray(records) ? records.length : 0} records (total in API: ${data.total || "unknown"})`);
+
+  return Array.isArray(records) ? records : [];
+}
+
 export async function syncProperties() {
-  const data = await doorloopFetch("/properties");
-  const properties = data.data || data;
+  const properties = await doorloopFetchAll("/properties");
 
   let count = 0;
   for (const p of properties) {
@@ -72,8 +85,7 @@ export async function syncProperties() {
 }
 
 export async function syncUnits() {
-  const data = await doorloopFetch("/units");
-  const units = data.data || data;
+  const units = await doorloopFetchAll("/units");
 
   let count = 0;
   for (const u of units) {
@@ -124,70 +136,75 @@ export async function syncUnits() {
   return count;
 }
 
-// ─── NEW: Sync Tenants ────────────────────────────────────────────────────────
-
 export async function syncTenants() {
-  const data = await doorloopFetch("/tenants");
-  const tenants = data.data || data;
+  const tenants = await doorloopFetchAll("/tenants");
 
   let count = 0;
-  for (const t of tenants) {
-    // DoorLoop may return phone in different fields — check all possibilities
-    const phone =
-      t.phone ||
-      t.mobilePhone ||
-      (Array.isArray(t.phones) ? t.phones[0]?.number : null) ||
-      null;
+  for (let i = 0; i < tenants.length; i += 10) {
+    const batch = tenants.slice(i, i + 10);
 
-    const mobilePhone =
-      t.mobilePhone ||
-      (Array.isArray(t.phones)
-        ? t.phones.find((p: any) => p.type === "mobile")?.number
-        : null) ||
-      null;
+    await Promise.all(batch.map(async (t) => {
+      const phone =
+        t.phone ||
+        t.mobilePhone ||
+        (Array.isArray(t.phones) ? t.phones[0]?.number : null) ||
+        null;
 
-    await prisma.tenant.upsert({
-      where: { id: t.id },
-      update: {
-        firstName: t.firstName || null,
-        lastName: t.lastName || null,
-        email: t.email || null,
-        phone: phone ? normalizePhone(phone) : null,
-        mobilePhone: mobilePhone ? normalizePhone(mobilePhone) : null,
-        type: t.type || null,
-        status: t.status || null,
-        notes: t.notes || null,
-        rawData: t,
-        syncedAt: new Date(),
-      },
-      create: {
-        id: t.id,
-        firstName: t.firstName || null,
-        lastName: t.lastName || null,
-        email: t.email || null,
-        phone: phone ? normalizePhone(phone) : null,
-        mobilePhone: mobilePhone ? normalizePhone(mobilePhone) : null,
-        type: t.type || null,
-        status: t.status || null,
-        notes: t.notes || null,
-        rawData: t,
-      },
-    });
-    count++;
+      const mobilePhone =
+        t.mobilePhone ||
+        (Array.isArray(t.phones)
+          ? t.phones.find((p: any) => p.type === "mobile")?.number
+          : null) ||
+        null;
+
+      const type = t.type === "TENANT" ? "TENANT" : t.type === "PROSPECT" ? "PROSPECT" : t.type || null;
+
+      try {
+        await prisma.people.upsert({
+          where: { id: t.id },
+          update: {
+            firstName: t.firstName || null,
+            lastName: t.lastName || null,
+            email: t.email || null,
+            phone: phone ? normalizePhone(phone) : null,
+            mobilePhone: mobilePhone ? normalizePhone(mobilePhone) : null,
+            type,
+            status: t.status || null,
+            notes: t.notes || null,
+            rawData: t,
+            syncedAt: new Date(),
+          },
+          create: {
+            id: t.id,
+            firstName: t.firstName || null,
+            lastName: t.lastName || null,
+            email: t.email || null,
+            phone: phone ? normalizePhone(phone) : null,
+            mobilePhone: mobilePhone ? normalizePhone(mobilePhone) : null,
+            type,
+            status: t.status || null,
+            notes: t.notes || null,
+            rawData: t,
+          },
+        });
+        count++;
+      } catch (error: any) {
+        console.error(`[SYNC] Failed to upsert tenant ${t.id} (${t.firstName} ${t.lastName}):`, error.message);
+      }
+    }));
+
+    console.log(`[SYNC] Tenants batch ${Math.floor(i / 10) + 1}: ${count} saved so far`);
+    await new Promise((r) => setTimeout(r, 100));
   }
 
   return count;
 }
 
-// ─── NEW: Sync Leases ─────────────────────────────────────────────────────────
-
 export async function syncLeases() {
-  const data = await doorloopFetch("/leases?filter_status=ACTIVE");
-  const leases = data.data || data;
+  const leases = await doorloopFetchAll("/leases?filter_status=ACTIVE");
 
   let count = 0;
   for (const l of leases) {
-    // DoorLoop leases can have multiple tenants — grab the primary one
     const tenantId =
       l.tenantId ||
       l.tenant ||
@@ -239,19 +256,13 @@ export async function syncLeases() {
   return count;
 }
 
-// ─── NEW: Sync Tasks (Maintenance Requests) ───────────────────────────────────
-
 export async function syncTasks() {
-  // Fetch open and in-progress tasks separately then combine
-  const [openData, inProgressData] = await Promise.all([
-    doorloopFetch("/tasks?filter_status=OPEN"),
-    doorloopFetch("/tasks?filter_status=IN_PROGRESS"),
+  const [openTasks, inProgressTasks] = await Promise.all([
+    doorloopFetchAll("/tasks?filter_status=OPEN"),
+    doorloopFetchAll("/tasks?filter_status=IN_PROGRESS"),
   ]);
 
-  const tasks = [
-    ...(openData.data || openData),
-    ...(inProgressData.data || inProgressData),
-  ];
+  const tasks = [...openTasks, ...inProgressTasks];
 
   let count = 0;
   for (const t of tasks) {
@@ -294,8 +305,6 @@ export async function syncTasks() {
   return count;
 }
 
-// ─── Master Sync ──────────────────────────────────────────────────────────────
-
 export async function syncAll() {
   const properties = await syncProperties();
   const units = await syncUnits();
@@ -305,9 +314,6 @@ export async function syncAll() {
   return { properties, units, tenants, leases, tasks };
 }
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
-
-// Normalize any phone format to E.164 (+1XXXXXXXXXX) for consistent matching
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, "");
   if (digits.length === 10) return `+1${digits}`;

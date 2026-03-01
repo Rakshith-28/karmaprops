@@ -16,10 +16,10 @@ export async function POST(request: NextRequest) {
 
     // Check if this is a tenant or prospect
     const phoneLast10 = fromPhone.replace(/\D/g, "").slice(-10);
-    const tenant = await prisma.tenant.findFirst({
+    const tenant = await prisma.people.findFirst({
       where: {
         phone: { contains: phoneLast10 },
-        type: "LEASE_TENANT",
+        type: "TENANT",
       },
     });
 

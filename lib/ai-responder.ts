@@ -58,10 +58,10 @@ async function identifyCaller(phone: string) {
     const phoneLast10 = phone.replace(/\D/g, "").slice(-10);
     console.log(`[DEBUG] Looking up phone: ${phoneLast10}`);
 
-    const tenant = await prisma.tenant.findFirst({
+    const tenant = await prisma.people.findFirst({
       where: {
         phone: { contains: phoneLast10 },
-        type: "LEASE_TENANT",
+        type: "TENANT",
       },
     });
 
