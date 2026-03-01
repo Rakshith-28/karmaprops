@@ -305,13 +305,153 @@ export async function syncTasks() {
   return count;
 }
 
+export async function syncOwners() {
+  const owners = await doorloopFetchAll("/owners");
+
+  let count = 0;
+  for (const o of owners) {
+    const email = Array.isArray(o.emails)
+      ? o.emails.find((e: any) => e.address)?.address || null
+      : null;
+
+    const phone = o.e164PhoneMobileNumber ||
+      (Array.isArray(o.phones) ? o.phones.find((p: any) => p.number)?.number : null) ||
+      null;
+
+    try {
+      await prisma.owner.upsert({
+        where: { id: o.id },
+        update: {
+          firstName: o.firstName || null,
+          lastName: o.lastName || null,
+          name: o.name || null,
+          fullName: o.fullName || null,
+          companyName: o.companyName || null,
+          email,
+          phone: phone ? normalizePhone(phone) : null,
+          street1: o.primaryAddress?.street1 || null,
+          street2: o.primaryAddress?.street2 || null,
+          city: o.primaryAddress?.city || null,
+          state: o.primaryAddress?.state || null,
+          zip: o.primaryAddress?.zip || null,
+          country: o.primaryAddress?.country || null,
+          active: o.active ?? true,
+          managementStartDate: o.managementStartDate || null,
+          managementEndDate: o.managementEndDate || null,
+          properties: o.properties || [],
+          rawData: o,
+          syncedAt: new Date(),
+        },
+        create: {
+          id: o.id,
+          firstName: o.firstName || null,
+          lastName: o.lastName || null,
+          name: o.name || null,
+          fullName: o.fullName || null,
+          companyName: o.companyName || null,
+          email,
+          phone: phone ? normalizePhone(phone) : null,
+          street1: o.primaryAddress?.street1 || null,
+          street2: o.primaryAddress?.street2 || null,
+          city: o.primaryAddress?.city || null,
+          state: o.primaryAddress?.state || null,
+          zip: o.primaryAddress?.zip || null,
+          country: o.primaryAddress?.country || null,
+          active: o.active ?? true,
+          managementStartDate: o.managementStartDate || null,
+          managementEndDate: o.managementEndDate || null,
+          properties: o.properties || [],
+          rawData: o,
+        },
+      });
+      count++;
+    } catch (error: any) {
+      console.error(`[SYNC] Failed to upsert owner ${o.id} (${o.name}):`, error.message);
+    }
+  }
+
+  return count;
+}
+
+export async function syncVendors() {
+  const vendors = await doorloopFetchAll("/vendors");
+
+  let count = 0;
+  for (const v of vendors) {
+    const email = Array.isArray(v.emails)
+      ? v.emails.find((e: any) => e.address)?.address || null
+      : null;
+
+    const phone = v.e164PhoneMobileNumber ||
+      (Array.isArray(v.phones) ? v.phones.find((p: any) => p.number)?.number : null) ||
+      null;
+
+    try {
+      await prisma.vendor.upsert({
+        where: { id: v.id },
+        update: {
+          firstName: v.firstName || null,
+          lastName: v.lastName || null,
+          name: v.name || null,
+          fullName: v.fullName || null,
+          companyName: v.companyName || null,
+          email,
+          phone: phone ? normalizePhone(phone) : null,
+          street1: v.primaryAddress?.street1 || null,
+          street2: v.primaryAddress?.street2 || null,
+          city: v.primaryAddress?.city || null,
+          state: v.primaryAddress?.state || null,
+          zip: v.primaryAddress?.zip || null,
+          country: v.primaryAddress?.country || null,
+          active: v.active ?? true,
+          balance: v.balance ?? null,
+          notes: v.notes || null,
+          properties: v.properties || [],
+          accounts: v.accounts || [],
+          rawData: v,
+          syncedAt: new Date(),
+        },
+        create: {
+          id: v.id,
+          firstName: v.firstName || null,
+          lastName: v.lastName || null,
+          name: v.name || null,
+          fullName: v.fullName || null,
+          companyName: v.companyName || null,
+          email,
+          phone: phone ? normalizePhone(phone) : null,
+          street1: v.primaryAddress?.street1 || null,
+          street2: v.primaryAddress?.street2 || null,
+          city: v.primaryAddress?.city || null,
+          state: v.primaryAddress?.state || null,
+          zip: v.primaryAddress?.zip || null,
+          country: v.primaryAddress?.country || null,
+          active: v.active ?? true,
+          balance: v.balance ?? null,
+          notes: v.notes || null,
+          properties: v.properties || [],
+          accounts: v.accounts || [],
+          rawData: v,
+        },
+      });
+      count++;
+    } catch (error: any) {
+      console.error(`[SYNC] Failed to upsert vendor ${v.id} (${v.name}):`, error.message);
+    }
+  }
+
+  return count;
+}
+
 export async function syncAll() {
   const properties = await syncProperties();
   const units = await syncUnits();
   const tenants = await syncTenants();
   const leases = await syncLeases();
   const tasks = await syncTasks();
-  return { properties, units, tenants, leases, tasks };
+  const owners = await syncOwners();
+  const vendors = await syncVendors();
+  return { properties, units, tenants, leases, tasks, owners, vendors };
 }
 
 function normalizePhone(phone: string): string {

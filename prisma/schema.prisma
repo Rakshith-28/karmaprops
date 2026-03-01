@@ -138,3 +138,54 @@ model playing_with_neon {
   name  String
   value Float? @db.Real
 }
+
+model Owner {
+  id                    String   @id
+  firstName             String?
+  lastName              String?
+  name                  String?
+  fullName              String?
+  companyName           String?
+  email                 String?
+  phone                 String?
+  street1               String?
+  street2               String?
+  city                  String?
+  state                 String?
+  zip                   String?
+  country               String?
+  active                Boolean  @default(true)
+  managementStartDate   String?
+  managementEndDate     String?
+  properties            String[]
+  rawData               Json?
+  syncedAt              DateTime @default(now())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Vendor {
+  id            String   @id
+  firstName     String?
+  lastName      String?
+  name          String?
+  fullName      String?
+  companyName   String?
+  email         String?
+  phone         String?
+  street1       String?
+  street2       String?
+  city          String?
+  state         String?
+  zip           String?
+  country       String?
+  active        Boolean  @default(true)
+  balance       Float?
+  notes         String?
+  properties    String[]
+  accounts      String[]
+  rawData       Json?
+  syncedAt      DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
