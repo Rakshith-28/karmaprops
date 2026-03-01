@@ -319,26 +319,16 @@ export async function syncOwners() {
       null;
 
     try {
-      await prisma.owner.upsert({
+      await prisma.people.upsert({
         where: { id: o.id },
         update: {
           firstName: o.firstName || null,
           lastName: o.lastName || null,
-          name: o.name || null,
-          fullName: o.fullName || null,
-          companyName: o.companyName || null,
           email,
           phone: phone ? normalizePhone(phone) : null,
-          street1: o.primaryAddress?.street1 || null,
-          street2: o.primaryAddress?.street2 || null,
-          city: o.primaryAddress?.city || null,
-          state: o.primaryAddress?.state || null,
-          zip: o.primaryAddress?.zip || null,
-          country: o.primaryAddress?.country || null,
-          active: o.active ?? true,
-          managementStartDate: o.managementStartDate || null,
-          managementEndDate: o.managementEndDate || null,
-          properties: o.properties || [],
+          type: "OWNER",
+          status: o.active ? "ACTIVE" : "INACTIVE",
+          notes: o.companyName || null,
           rawData: o,
           syncedAt: new Date(),
         },
@@ -346,21 +336,11 @@ export async function syncOwners() {
           id: o.id,
           firstName: o.firstName || null,
           lastName: o.lastName || null,
-          name: o.name || null,
-          fullName: o.fullName || null,
-          companyName: o.companyName || null,
           email,
           phone: phone ? normalizePhone(phone) : null,
-          street1: o.primaryAddress?.street1 || null,
-          street2: o.primaryAddress?.street2 || null,
-          city: o.primaryAddress?.city || null,
-          state: o.primaryAddress?.state || null,
-          zip: o.primaryAddress?.zip || null,
-          country: o.primaryAddress?.country || null,
-          active: o.active ?? true,
-          managementStartDate: o.managementStartDate || null,
-          managementEndDate: o.managementEndDate || null,
-          properties: o.properties || [],
+          type: "OWNER",
+          status: o.active ? "ACTIVE" : "INACTIVE",
+          notes: o.companyName || null,
           rawData: o,
         },
       });
@@ -372,7 +352,6 @@ export async function syncOwners() {
 
   return count;
 }
-
 export async function syncVendors() {
   const vendors = await doorloopFetchAll("/vendors");
 
@@ -387,27 +366,16 @@ export async function syncVendors() {
       null;
 
     try {
-      await prisma.vendor.upsert({
+      await prisma.people.upsert({
         where: { id: v.id },
         update: {
           firstName: v.firstName || null,
           lastName: v.lastName || null,
-          name: v.name || null,
-          fullName: v.fullName || null,
-          companyName: v.companyName || null,
           email,
           phone: phone ? normalizePhone(phone) : null,
-          street1: v.primaryAddress?.street1 || null,
-          street2: v.primaryAddress?.street2 || null,
-          city: v.primaryAddress?.city || null,
-          state: v.primaryAddress?.state || null,
-          zip: v.primaryAddress?.zip || null,
-          country: v.primaryAddress?.country || null,
-          active: v.active ?? true,
-          balance: v.balance ?? null,
-          notes: v.notes || null,
-          properties: v.properties || [],
-          accounts: v.accounts || [],
+          type: "VENDOR",
+          status: v.active ? "ACTIVE" : "INACTIVE",
+          notes: v.companyName ? `${v.companyName}${v.notes ? " | " + v.notes : ""}` : v.notes || null,
           rawData: v,
           syncedAt: new Date(),
         },
@@ -415,22 +383,11 @@ export async function syncVendors() {
           id: v.id,
           firstName: v.firstName || null,
           lastName: v.lastName || null,
-          name: v.name || null,
-          fullName: v.fullName || null,
-          companyName: v.companyName || null,
           email,
           phone: phone ? normalizePhone(phone) : null,
-          street1: v.primaryAddress?.street1 || null,
-          street2: v.primaryAddress?.street2 || null,
-          city: v.primaryAddress?.city || null,
-          state: v.primaryAddress?.state || null,
-          zip: v.primaryAddress?.zip || null,
-          country: v.primaryAddress?.country || null,
-          active: v.active ?? true,
-          balance: v.balance ?? null,
-          notes: v.notes || null,
-          properties: v.properties || [],
-          accounts: v.accounts || [],
+          type: "VENDOR",
+          status: v.active ? "ACTIVE" : "INACTIVE",
+          notes: v.companyName ? `${v.companyName}${v.notes ? " | " + v.notes : ""}` : v.notes || null,
           rawData: v,
         },
       });
@@ -442,7 +399,6 @@ export async function syncVendors() {
 
   return count;
 }
-
 export async function syncAll() {
   const properties = await syncProperties();
   const units = await syncUnits();
