@@ -136,7 +136,8 @@ export async function syncUnits() {
   return count;
 }
 
-export async function syncTenants() {
+// ─── Sync tenants & prospects from DoorLoop into People table ───
+export async function syncPeople() {
   const tenants = await doorloopFetchAll("/tenants");
 
   let count = 0;
@@ -157,7 +158,10 @@ export async function syncTenants() {
           : null) ||
         null;
 
-      const type = t.type === "TENANT" ? "TENANT" : t.type === "PROSPECT" ? "PROSPECT" : t.type || null;
+      // Map DoorLoop types to clean types
+      const type = t.type === "LEASE_TENANT" ? "TENANT"
+        : t.type === "PROSPECT_TENANT" ? "PROSPECT"
+        : t.type || null;
 
       try {
         await prisma.people.upsert({
@@ -189,11 +193,11 @@ export async function syncTenants() {
         });
         count++;
       } catch (error: any) {
-        console.error(`[SYNC] Failed to upsert tenant ${t.id} (${t.firstName} ${t.lastName}):`, error.message);
+        console.error(`[SYNC] Failed to upsert person ${t.id} (${t.firstName} ${t.lastName}):`, error.message);
       }
     }));
 
-    console.log(`[SYNC] Tenants batch ${Math.floor(i / 10) + 1}: ${count} saved so far`);
+    console.log(`[SYNC] People batch ${Math.floor(i / 10) + 1}: ${count} saved so far`);
     await new Promise((r) => setTimeout(r, 100));
   }
 
@@ -305,6 +309,7 @@ export async function syncTasks() {
   return count;
 }
 
+// ─── Sync owners from DoorLoop into People table ───
 export async function syncOwners() {
   const owners = await doorloopFetchAll("/owners");
 
@@ -352,6 +357,8 @@ export async function syncOwners() {
 
   return count;
 }
+
+// ─── Sync vendors from DoorLoop into People table ───
 export async function syncVendors() {
   const vendors = await doorloopFetchAll("/vendors");
 
@@ -399,15 +406,17 @@ export async function syncVendors() {
 
   return count;
 }
+
+// ─── Sync everything ───
 export async function syncAll() {
   const properties = await syncProperties();
   const units = await syncUnits();
-  const tenants = await syncTenants();
+  const people = await syncPeople();
   const leases = await syncLeases();
   const tasks = await syncTasks();
   const owners = await syncOwners();
   const vendors = await syncVendors();
-  return { properties, units, tenants, leases, tasks, owners, vendors };
+  return { properties, units, people, leases, tasks, owners, vendors };
 }
 
 function normalizePhone(phone: string): string {
