@@ -14,21 +14,8 @@ export async function POST(request: NextRequest) {
     const fromPhone = event.data.object.from;
     const toPhone = event.data.object.to;
 
-    // Check if this is a tenant or prospect
-    const phoneLast10 = fromPhone.replace(/\D/g, "").slice(-10);
-    const tenant = await prisma.people.findFirst({
-      where: {
-        phone: { contains: phoneLast10 },
-        type: "TENANT",
-      },
-    });
-
-    const callerType = tenant ? "tenant" : "prospect";
-    const callerName = tenant
-      ? `${tenant.firstName || ""} ${tenant.lastName || ""}`.trim()
-      : null;
-
-    const reply = await getResponse(incomingMessage, fromPhone);
+    // AI responder now handles identification and returns type + name
+    const { reply, callerType, callerName } = await getResponse(incomingMessage, fromPhone);
 
     // Save as pending with caller type tagged
     const message = await prisma.message.create({
@@ -39,8 +26,7 @@ export async function POST(request: NextRequest) {
         aiReply: reply,
         status: "pending",
         callerType,
-        callerName,
-        tenantId: tenant?.id || null,
+        callerName: callerName || null,
       },
     });
 

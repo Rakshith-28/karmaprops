@@ -52,61 +52,139 @@ Units:
 ${units || "  No units listed"}`;
 }
 
-// ─── Identify caller: tenant or prospect ───
+// ─── Identify caller: tenant, owner, vendor, or prospect ───
 async function identifyCaller(phone: string) {
   try {
     const phoneLast10 = phone.replace(/\D/g, "").slice(-10);
     console.log(`[DEBUG] Looking up phone: ${phoneLast10}`);
 
-    const tenant = await prisma.people.findFirst({
+    // Check all people types in one query
+    const person = await prisma.people.findFirst({
       where: {
-        phone: { contains: phoneLast10 },
-        type: "TENANT",
+        OR: [
+          { phone: { contains: phoneLast10 } },
+          { mobilePhone: { contains: phoneLast10 } },
+        ],
       },
     });
 
-    console.log(`[DEBUG] Tenant found:`, tenant ? `${tenant.firstName} ${tenant.lastName}` : "NONE");
+    console.log(`[DEBUG] Person found:`, person ? `${person.firstName} ${person.lastName} (${person.type})` : "NONE");
 
-    if (!tenant) return { type: "prospect" as const, tenant: null };
+    if (!person) return { type: "prospect" as const, person: null };
 
-    // Get their lease info
-    const lease = await prisma.lease.findFirst({
-      where: {
-        tenantId: tenant.id,
-        status: { in: ["ACTIVE", "CURRENT"] },
-      },
-    });
-
-    // Get open maintenance tasks
-    const tasks = await prisma.task.findMany({
-      where: {
-        tenantId: tenant.id,
-        status: { notIn: ["COMPLETED", "CLOSED", "CANCELLED"] },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-    });
-
-    // Get the property/unit info if we have a lease
-    let propertyInfo = null;
-    if (lease?.unitId) {
-      const unit = await prisma.unit.findUnique({
-        where: { id: lease.unitId },
-        include: { property: true },
+    // ─── TENANT FLOW ───
+    if (person.type === "TENANT") {
+      const lease = await prisma.lease.findFirst({
+        where: {
+          tenantId: person.id,
+          status: { in: ["ACTIVE", "CURRENT"] },
+        },
       });
-      propertyInfo = unit;
+
+      const tasks = await prisma.task.findMany({
+        where: {
+          tenantId: person.id,
+          status: { notIn: ["COMPLETED", "CLOSED", "CANCELLED"] },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      });
+
+      let propertyInfo = null;
+      if (lease?.unitId) {
+        const unit = await prisma.unit.findUnique({
+          where: { id: lease.unitId },
+          include: { property: true },
+        });
+        propertyInfo = unit;
+      }
+
+      return {
+        type: "tenant" as const,
+        person,
+        lease,
+        tasks,
+        propertyInfo,
+      };
     }
 
-    return {
-      type: "tenant" as const,
-      tenant,
-      lease,
-      tasks,
-      propertyInfo,
-    };
+    // ─── OWNER FLOW ───
+    if (person.type === "OWNER") {
+      // Get properties this owner manages (stored as property IDs in rawData)
+      const ownerPropertyIds: string[] = (person.rawData as any)?.properties || [];
+      let ownerProperties: any[] = [];
+
+      if (ownerPropertyIds.length > 0) {
+        ownerProperties = await prisma.property.findMany({
+          where: { id: { in: ownerPropertyIds } },
+          include: {
+            units: { where: { active: true } },
+          },
+        });
+      }
+
+      // Get active leases for owner's properties
+      const ownerLeases = ownerPropertyIds.length > 0
+        ? await prisma.lease.findMany({
+            where: {
+              propertyId: { in: ownerPropertyIds },
+              status: { in: ["ACTIVE", "CURRENT"] },
+            },
+          })
+        : [];
+
+      // Get open tasks for owner's properties
+      const ownerTasks = ownerPropertyIds.length > 0
+        ? await prisma.task.findMany({
+            where: {
+              propertyId: { in: ownerPropertyIds },
+              status: { notIn: ["COMPLETED", "CLOSED", "CANCELLED"] },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 10,
+          })
+        : [];
+
+      return {
+        type: "owner" as const,
+        person,
+        properties: ownerProperties,
+        leases: ownerLeases,
+        tasks: ownerTasks,
+      };
+    }
+
+    // ─── VENDOR FLOW ───
+    if (person.type === "VENDOR") {
+      // Get tasks assigned to this vendor (by name match)
+      const vendorName = `${person.firstName || ""} ${person.lastName || ""}`.trim();
+      const companyName = person.notes?.split(" | ")[0] || "";
+
+      const vendorTasks = await prisma.task.findMany({
+        where: {
+          status: { notIn: ["COMPLETED", "CLOSED", "CANCELLED"] },
+          OR: [
+            ...(vendorName ? [{ assignedTo: { contains: vendorName } }] : []),
+            ...(companyName ? [{ assignedTo: { contains: companyName } }] : []),
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      });
+
+      return {
+        type: "vendor" as const,
+        person,
+        tasks: vendorTasks,
+      };
+    }
+
+    // ─── PROSPECT FLOW (default) ───
+    return { type: "prospect" as const, person };
+
   } catch (error) {
     console.warn("Failed to identify caller:", error);
-    return { type: "prospect" as const, tenant: null };
+    return { type: "prospect" as const, person: null };
   }
 }
 
@@ -164,8 +242,8 @@ async function buildProspectContext(message: string) {
         });
       }
 
-      if (properties.length > 15) {
-        properties = properties.slice(0, 15);
+      if (properties.length > 20) {
+        properties = properties.slice(0, 20);
       }
 
       const propertyText = properties.map((p: any) => formatProperty(p)).join("\n---\n");
@@ -187,12 +265,12 @@ async function buildProspectContext(message: string) {
 
 // ─── Build context for TENANTS ───
 function buildTenantContext(callerInfo: any) {
-  const { tenant, lease, tasks, propertyInfo } = callerInfo;
+  const { person, lease, tasks, propertyInfo } = callerInfo;
 
   let context = `TENANT INFO:
-Name: ${tenant.firstName} ${tenant.lastName}
-Phone: ${tenant.phone}
-Email: ${tenant.email || "Not on file"}`;
+Name: ${person.firstName} ${person.lastName}
+Phone: ${person.phone}
+Email: ${person.email || "Not on file"}`;
 
   if (lease) {
     context += `\n\nLEASE DETAILS:
@@ -211,7 +289,7 @@ Address: ${propertyInfo.property?.street1 || ""}, ${propertyInfo.property?.city 
   if (tasks && tasks.length > 0) {
     context += `\n\nOPEN MAINTENANCE REQUESTS:`;
     tasks.forEach((t: any) => {
-      context += `\n- ${t.subject || "Untitled"} (Status: ${t.status}, Created: ${new Date(t.createdAt).toLocaleDateString()})`;
+      context += `\n- ${t.title || "Untitled"} (Status: ${t.status}, Created: ${new Date(t.createdAt).toLocaleDateString()})`;
     });
   } else {
     context += `\n\nOPEN MAINTENANCE REQUESTS: None`;
@@ -220,14 +298,80 @@ Address: ${propertyInfo.property?.street1 || ""}, ${propertyInfo.property?.city 
   return context;
 }
 
-// ─── Get conversation history ───
+// ─── Build context for OWNERS ───
+function buildOwnerContext(callerInfo: any) {
+  const { person, properties, leases, tasks } = callerInfo;
+
+  let context = `OWNER INFO:
+Name: ${person.firstName} ${person.lastName}
+Phone: ${person.phone || "Not on file"}
+Email: ${person.email || "Not on file"}
+Company: ${person.notes || "N/A"}`;
+
+  if (properties && properties.length > 0) {
+    context += `\n\nOWNER'S PROPERTIES (${properties.length}):`;
+    properties.forEach((p: any) => {
+      const occupiedUnits = leases.filter((l: any) => l.propertyId === p.id).length;
+      const totalUnits = p.units?.length || 0;
+      context += `\n- ${p.name} (${p.street1 || ""}, ${p.city || ""} ${p.state || ""})`;
+      context += `\n  Units: ${totalUnits} total, ${occupiedUnits} occupied, ${totalUnits - occupiedUnits} vacant`;
+    });
+  } else {
+    context += `\n\nOWNER'S PROPERTIES: None currently linked`;
+  }
+
+  if (leases && leases.length > 0) {
+    context += `\n\nACTIVE LEASES (${leases.length}):`;
+    leases.forEach((l: any) => {
+      context += `\n- Property: ${l.propertyId} | Rent: $${l.monthlyRent || "N/A"}/mo | Ends: ${l.endDate ? new Date(l.endDate).toLocaleDateString() : "N/A"}`;
+    });
+  }
+
+  if (tasks && tasks.length > 0) {
+    context += `\n\nOPEN MAINTENANCE TASKS ON YOUR PROPERTIES (${tasks.length}):`;
+    tasks.forEach((t: any) => {
+      context += `\n- ${t.title || "Untitled"} | Status: ${t.status} | Priority: ${t.priority || "Normal"} | Created: ${new Date(t.createdAt).toLocaleDateString()}`;
+    });
+  } else {
+    context += `\n\nOPEN MAINTENANCE TASKS: None`;
+  }
+
+  return context;
+}
+
+// ─── Build context for VENDORS ───
+function buildVendorContext(callerInfo: any) {
+  const { person, tasks } = callerInfo;
+
+  let context = `VENDOR INFO:
+Name: ${person.firstName} ${person.lastName}
+Phone: ${person.phone || "Not on file"}
+Email: ${person.email || "Not on file"}
+Company: ${person.notes || "N/A"}`;
+
+  if (tasks && tasks.length > 0) {
+    context += `\n\nASSIGNED WORK ORDERS (${tasks.length}):`;
+    tasks.forEach((t: any) => {
+      context += `\n- ${t.title || "Untitled"}`;
+      context += `\n  Property: ${t.propertyId || "N/A"} | Unit: ${t.unitId || "N/A"}`;
+      context += `\n  Status: ${t.status} | Priority: ${t.priority || "Normal"}`;
+      context += `\n  Created: ${new Date(t.createdAt).toLocaleDateString()}`;
+      if (t.description) context += `\n  Details: ${t.description}`;
+    });
+  } else {
+    context += `\n\nASSIGNED WORK ORDERS: None currently assigned`;
+  }
+
+  return context;
+}
+
 // ─── Get conversation history (KarmaProps DB + Quo/OpenPhone) ───
 async function getConversationHistory(phone: string) {
   let history = "";
 
   // 1. Try fetching from Quo/OpenPhone (old + manual conversations)
   try {
-    const quoMessages = await getQuoMessages(phone, 30);
+    const quoMessages = await getQuoMessages(phone, 50);
     const quoHistory = formatQuoHistory(quoMessages, process.env.QUO_FROM_NUMBER || "");
 
     if (quoHistory) {
@@ -243,7 +387,7 @@ async function getConversationHistory(phone: string) {
     const dbMessages = await prisma.message.findMany({
       where: { fromPhone: phone },
       orderBy: { createdAt: "asc" },
-      take: 20,
+      take: 50,
     });
 
     if (dbMessages.length > 0) {
@@ -259,6 +403,7 @@ async function getConversationHistory(phone: string) {
 
   return history;
 }
+
 // ─── System prompts ───
 function getProspectSystemPrompt(propertyContext: string, conversationHistory: string) {
   return `You are a real human leasing agent named Alex who works at KarmaProps Property Management. You respond to rental prospects via text message exactly like a knowledgeable, friendly, and helpful real estate professional would.
@@ -358,34 +503,154 @@ NEVER DO:
 - Only reference specific details (dates, request types, amounts) if they appear EXACTLY in the tenant data above. If the data doesn't contain it, don't mention it.`;
 }
 
+function getOwnerSystemPrompt(ownerContext: string, conversationHistory: string) {
+  return `You are a real human property manager named Alex who works at KarmaProps Property Management. You're responding to a PROPERTY OWNER via text message. Be professional, transparent, and proactive — this person trusts KarmaProps to manage their investment properties.
+
+OWNER DATA:
+${ownerContext}
+${conversationHistory}
+
+HOW TO BEHAVE:
+- You are Alex, a property manager at KarmaProps. Never say you are an AI, a bot, or an assistant.
+- Address them by first name. Be respectful — they are your client.
+- Talk like a real property manager texting an owner — professional but not stiff.
+- You have access to their property portfolio, lease info, and maintenance status. Use it.
+- Owners care about: occupancy, rent collection, maintenance costs, property condition, and ROI.
+
+WHAT YOU CAN HELP WITH:
+1. PROPERTY STATUS:
+   - Occupancy rates, vacant units, upcoming lease expirations
+   - "Your property at [address] is fully occupied" or "You have 1 vacant unit at [address]"
+
+2. FINANCIAL QUESTIONS:
+   - Reference active lease amounts and occupancy
+   - For detailed financial reports, owner statements, or exact payment amounts: "I'll have our accounting team send you the latest owner statement."
+   - Never make up exact dollar amounts for expenses, distributions, or balances
+
+3. MAINTENANCE UPDATES:
+   - Share open maintenance tasks on their properties
+   - Provide status updates: "We have a plumbing issue at [property] — our vendor is scheduled for [date]"
+   - For cost approvals: "We need your approval for a repair estimated at $X. Want me to proceed?"
+
+4. TENANT ISSUES:
+   - General updates on tenant situations without sharing personal tenant info
+   - Lease renewals, move-outs, new tenant placement
+
+5. MANAGEMENT QUESTIONS:
+   - Management agreement terms, fees, services provided
+   - For detailed contract questions: "Let me pull up your management agreement and get back to you."
+
+REPLY FORMAT:
+- Professional but conversational, 2-5 sentences for simple questions
+- For property updates, use a clear format:
+  📍 [Property Address]
+  🏠 [Occupancy status]
+  🔧 [Maintenance status]
+- Always end with a next step or "Anything else you'd like to know about your properties?"
+
+NEVER DO:
+- Never make up financial figures, expense amounts, or distribution details
+- Never share specific tenant personal information (phone, email, SSN, etc.)
+- Never make promises about timelines you can't guarantee
+- If you don't have the info, say "Let me check with our team and get back to you with the exact details."
+- CRITICAL: Only reference specific details if they appear EXACTLY in the owner data above. If the data doesn't contain it, don't mention it.`;
+}
+
+function getVendorSystemPrompt(vendorContext: string, conversationHistory: string) {
+  return `You are a real human property manager named Alex who works at KarmaProps Property Management. You're responding to a VENDOR/CONTRACTOR via text message. Be professional, clear, and efficient — vendors need clear instructions and timely communication.
+
+VENDOR DATA:
+${vendorContext}
+${conversationHistory}
+
+HOW TO BEHAVE:
+- You are Alex, a property manager at KarmaProps. Never say you are an AI, a bot, or an assistant.
+- Be direct and professional. Vendors appreciate clear, efficient communication.
+- You have access to their assigned work orders. Reference them when relevant.
+- Coordinate scheduling, provide property access details, and confirm work scope.
+
+WHAT YOU CAN HELP WITH:
+1. WORK ORDERS:
+   - Reference their assigned tasks: "I see you have a work order for [task] at [property]"
+   - Provide property address and unit details for scheduled work
+   - Confirm scope of work and any special instructions
+
+2. SCHEDULING:
+   - Coordinate arrival times and property access
+   - "The tenant has been notified and will be available between [times]"
+   - For lockbox/key access: "I'll send you the access details before your visit"
+
+3. INVOICING & PAYMENTS:
+   - For invoice submissions: "Please send your invoice to our accounting email"
+   - For payment status: "Let me check with accounting on the status of your payment."
+   - Never make up payment amounts or dates
+
+4. PROPERTY ACCESS:
+   - Gate codes, lockbox codes, tenant contact info for coordination
+   - "I'll make sure the tenant knows you're coming on [date]"
+
+REPLY FORMAT:
+- Keep it professional and concise, 2-4 sentences
+- For work order details, be specific:
+  📍 Property: [Address]
+  🔧 Task: [Description]
+  📅 Status: [Current status]
+- Always confirm next steps clearly
+
+NEVER DO:
+- Never make up payment amounts, invoice details, or scheduling that isn't confirmed
+- Never share owner financial information with vendors
+- Never share tenant personal information beyond what's needed for the job
+- If you don't have the info, say "Let me check on that and get back to you shortly."
+- CRITICAL: Only reference specific work orders and details if they appear EXACTLY in the vendor data above.`;
+}
+
 // ─── Main export: get AI response ───
 export async function getResponse(message: string, fromPhone?: string) {
-  // Step 1: Identify if this is a tenant or prospect
+  // Step 1: Identify caller type
   const callerInfo = fromPhone
     ? await identifyCaller(fromPhone)
-    : { type: "prospect" as const, tenant: null };
+    : { type: "prospect" as const, person: null };
 
   const conversationHistory = fromPhone
     ? await getConversationHistory(fromPhone)
     : "";
 
   let systemPrompt: string;
+  let callerType = callerInfo.type;
+  let callerName: string | null = null;
 
   if (callerInfo.type === "tenant") {
-    // TENANT FLOW
     const tenantContext = buildTenantContext(callerInfo);
     systemPrompt = getTenantSystemPrompt(tenantContext, conversationHistory);
-    console.log(`[AI] Tenant flow for ${callerInfo.tenant?.firstName} ${callerInfo.tenant?.lastName}`);
+    callerName = `${callerInfo.person?.firstName || ""} ${callerInfo.person?.lastName || ""}`.trim();
+    console.log(`[AI] Tenant flow for ${callerName}`);
+
+  } else if (callerInfo.type === "owner") {
+    const ownerContext = buildOwnerContext(callerInfo);
+    systemPrompt = getOwnerSystemPrompt(ownerContext, conversationHistory);
+    callerName = `${callerInfo.person?.firstName || ""} ${callerInfo.person?.lastName || ""}`.trim();
+    console.log(`[AI] Owner flow for ${callerName}`);
+
+  } else if (callerInfo.type === "vendor") {
+    const vendorContext = buildVendorContext(callerInfo);
+    systemPrompt = getVendorSystemPrompt(vendorContext, conversationHistory);
+    callerName = `${callerInfo.person?.firstName || ""} ${callerInfo.person?.lastName || ""}`.trim();
+    console.log(`[AI] Vendor flow for ${callerName}`);
+
   } else {
-    // PROSPECT FLOW (existing behavior)
     const propertyContext = await buildProspectContext(message);
     systemPrompt = getProspectSystemPrompt(propertyContext, conversationHistory);
-    console.log(`[AI] Prospect flow for ${fromPhone || "unknown"}`);
+    // Check if we matched a prospect in People table
+    if (callerInfo.person) {
+      callerName = `${callerInfo.person.firstName || ""} ${callerInfo.person.lastName || ""}`.trim();
+    }
+    console.log(`[AI] Prospect flow for ${callerName || fromPhone || "unknown"}`);
   }
 
   try {
     const result = await groq.chat.completions.create({
-      model: "llama-3.1-8b-instant",
+      model: "llama-3.3-70b-versatile",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: message },
@@ -395,9 +660,13 @@ export async function getResponse(message: string, fromPhone?: string) {
     });
 
     const reply = result.choices[0]?.message?.content || "Sorry, I couldn't generate a response.";
-    return reply;
+    return { reply, callerType, callerName };
   } catch (error) {
     console.error("Groq request failed:", error);
-    return "Hey, having a quick technical issue on my end. Give me just a moment and I'll get right back to you!";
+    return {
+      reply: "Hey, having a quick technical issue on my end. Give me just a moment and I'll get right back to you!",
+      callerType,
+      callerName,
+    };
   }
 }
