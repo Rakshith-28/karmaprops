@@ -111,3 +111,59 @@ export async function getAllConversations(): Promise<any[]> {
 
   return allConversations;
 }
+
+export async function sendQuoMessage(toPhone: string, text: string) {
+  const res = await fetch(`${BASE_URL}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: QUO_API_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: QUO_PHONE_NUMBER_ID,
+      to: [toPhone],
+      text,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Quo send error ${res.status}: ${err}`);
+  }
+
+  return res.json();
+}
+
+// Fetch all contacts from Quo/OpenPhone
+export async function getAllQuoContacts(): Promise<Record<string, string>> {
+  const nameMap: Record<string, string> = {};
+  let nextPageToken: string | undefined;
+
+  while (true) {
+    const params = new URLSearchParams({ maxResults: "50" });
+    if (nextPageToken) params.set("pageToken", nextPageToken);
+
+    const data = await quoFetch(`/contacts?${params.toString()}`);
+
+    for (const contact of data.data || []) {
+      const firstName = contact.defaultFields?.firstName || "";
+      const lastName = contact.defaultFields?.lastName || "";
+      const name = `${firstName} ${lastName}`.trim();
+
+      if (name) {
+        for (const phone of contact.defaultFields?.phoneNumbers || []) {
+          if (phone.value) {
+            nameMap[phone.value] = name;
+          }
+        }
+      }
+    }
+
+    if (!data.nextPageToken || (data.data || []).length === 0) break;
+    nextPageToken = data.nextPageToken;
+
+    await new Promise((r) => setTimeout(r, 150));
+  }
+
+  return nameMap;
+}
