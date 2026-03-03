@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import Nav from "../components/Nav";
+import Nav from "../components/Navbar";
 
 interface Message {
   role: "user" | "ai";
