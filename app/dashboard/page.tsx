@@ -142,6 +142,7 @@ export default function Dashboard() {
   const [editingReply, setEditingReply] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [quoContacts, setQuoContacts] = useState<Record<string, string>>({});
 
@@ -163,7 +164,7 @@ export default function Dashboard() {
       const convos: ConversationSummary[] = Object.entries(grouped).map(([phone, messages]) => {
         const sorted = messages.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         const latest = sorted[0];
-        const pendingCount = messages.filter((m: any) => m.status === "pending").length;
+        const pendingCount = messages.filter((m: any) => m.status === "pending" || m.status === "received").length;
 
         return {
           phone,
@@ -297,6 +298,32 @@ export default function Dashboard() {
 
   const selectedConvo = conversations.find((c) => c.phone === selectedPhone);
   const pendingMessage = chatMessages.find((m) => m.status === "pending" && m.direction === "outgoing");
+
+  // Find the latest incoming message with status "received" (no AI reply yet)
+  const latestReceivedMessage = (() => {
+    const incoming = chatMessages.filter((m) => m.direction === "incoming");
+    if (incoming.length === 0) return null;
+    const latest = incoming[incoming.length - 1];
+    return latest.status === "received" ? latest : null;
+  })();
+
+  const handleGenerateReply = async () => {
+    if (!latestReceivedMessage?.messageId) return;
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/generate-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: latestReceivedMessage.messageId }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      if (selectedPhone) loadChat(selectedPhone);
+      fetchConversations();
+    } catch (err) {
+      console.error("Generate reply failed:", err);
+    }
+    setGenerating(false);
+  };
 
   const filters = [
     { key: "all", label: "All" },
@@ -495,6 +522,25 @@ export default function Dashboard() {
               })
             )}
             <div ref={chatEndRef} />
+
+            {/* Generate AI Reply Button */}
+            {latestReceivedMessage && !pendingMessage && (
+              <div style={{ display: "flex", justifyContent: "center", margin: "16px 0" }}>
+                <button
+                  onClick={handleGenerateReply}
+                  disabled={generating}
+                  style={{
+                    background: "#00a884", color: "#111b21", padding: "10px 24px", borderRadius: 8,
+                    border: "none", fontWeight: 600, fontSize: 14, cursor: generating ? "default" : "pointer",
+                    fontFamily: "inherit", opacity: generating ? 0.7 : 1, transition: "opacity 0.15s",
+                  }}
+                  onMouseEnter={(e) => { if (!generating) e.currentTarget.style.opacity = "0.85"; }}
+                  onMouseLeave={(e) => { if (!generating) e.currentTarget.style.opacity = "1"; }}
+                >
+                  {generating ? "⏳ Generating..." : "🤖 Generate AI Reply"}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Bottom Bar */}
