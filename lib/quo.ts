@@ -122,7 +122,7 @@ export async function sendQuoMessage(toPhone: string, text: string) {
     body: JSON.stringify({
       from: QUO_PHONE_NUMBER_ID,
       to: [toPhone],
-      text,
+      content: text,
     }),
   });
 
