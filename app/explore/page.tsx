@@ -434,7 +434,7 @@ export default function ExplorePage() {
         {/* Logo */}
         <div style={{ padding: "16px 20px", borderBottom: "1px solid #2a3942", display: "flex", alignItems: "center", gap: 8 }}>
           <a href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 18, fontWeight: 600, color: "#e9edef" }}>KarmaProps</span>
+            <span style={{ fontSize: 18, fontWeight: 600, color: "#e9edef" }}>Database</span>
             <span style={{ fontSize: 10, background: "#00a884", color: "#111b21", padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>AI</span>
           </a>
         </div>

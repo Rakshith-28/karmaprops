@@ -190,12 +190,15 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Fetch Quo contacts once on load
+  // Fetch Quo contacts and sync names into DB on load
   useEffect(() => {
     fetch("/api/contacts")
       .then((res) => res.json())
       .then((data) => setQuoContacts(data.contacts || {}))
       .catch(() => {});
+    
+    // Sync Quo contact names into Message table
+    fetch("/api/sync-contacts", { method: "POST" }).catch(() => {});
   }, []);
 
   // Poll every 15 seconds
@@ -336,25 +339,12 @@ export default function Dashboard() {
       {/* ═══ LEFT PANEL ═══ */}
       <div style={{ width: 420, minWidth: 420, borderRight: "1px solid #2a3942", display: "flex", flexDirection: "column", background: "#111b21" }}>
 
-        {/* Header */}
-        <div style={{ padding: "10px 16px", background: "#202c33", display: "flex", alignItems: "center", justifyContent: "space-between", height: 59 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 20, fontWeight: 600, color: "#e9edef" }}>KarmaProps</span>
-            <span style={{ fontSize: 11, background: "#00a884", color: "#111b21", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>AI</span>
-          </div>
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            style={{ background: "none", border: "none", cursor: "pointer", padding: 6, borderRadius: "50%", display: "flex", alignItems: "center", opacity: syncing ? 0.5 : 1 }}
-            title="Sync DoorLoop Data"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="#aebac1" style={{ animation: syncing ? "spin 1s linear infinite" : "none" }}>
-              <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" />
-            </svg>
-          </button>
-        </div>
+      
 
         {/* Search */}
+        <div style={{ padding: "8px 12px", background: "#111b21"}}>
+          <p style={{ fontSize: 24, fontWeight: 500, color: "#e9edef" }}>Chats</p>
+        </div>
         <div style={{ padding: "8px 12px", background: "#111b21" }}>
           <div style={{ display: "flex", alignItems: "center", background: "#202c33", borderRadius: 8, padding: "6px 12px", gap: 12 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="#8696a0"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" /></svg>
