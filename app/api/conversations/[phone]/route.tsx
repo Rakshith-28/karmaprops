@@ -58,9 +58,35 @@ export async function GET(
       return msgs;
     });
 
-    // 3. Merge and sort
+   // 3. Merge, deduplicate, and sort
     const allMessages = [...quoMessages, ...dbFormatted];
-    allMessages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    
+    // Deduplicate: if a Quo message and DB message have the same text 
+    // and are within 2 minutes of each other, keep only the DB version (it has status info)
+    const deduped: any[] = [];
+    const seen = new Set<string>();
+    
+    // First pass: add all DB messages and mark them
+    for (const msg of allMessages) {
+      if (msg.source === "karmaprops") {
+        const key = `${msg.text.slice(0, 50).trim().toLowerCase()}-${msg.direction}`;
+        seen.add(key);
+        deduped.push(msg);
+      }
+    }
+    
+    // Second pass: add Quo messages only if not already covered by DB
+    for (const msg of allMessages) {
+      if (msg.source === "quo") {
+        const key = `${msg.text.slice(0, 50).trim().toLowerCase()}-${msg.direction}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduped.push(msg);
+        }
+      }
+    }
+    
+    deduped.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
     // 4. Get caller info
     const phoneLast10 = decodedPhone.replace(/\D/g, "").slice(-10);
