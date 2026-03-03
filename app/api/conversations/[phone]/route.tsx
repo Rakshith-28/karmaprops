@@ -103,7 +103,7 @@ export async function GET(
       phone: decodedPhone,
       callerName: person ? `${person.firstName || ""} ${person.lastName || ""}`.trim() : null,
       callerType: person?.type?.toLowerCase() || "prospect",
-      messages: allMessages,
+      messages: deduped,
     });
   } catch (error: any) {
     console.error("Conversation fetch error:", error.message);
