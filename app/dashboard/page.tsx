@@ -300,12 +300,7 @@ export default function Dashboard() {
   const pendingMessage = chatMessages.find((m) => m.status === "pending" && m.direction === "outgoing");
 
   // Find the latest incoming message with status "received" (no AI reply yet)
-  const latestReceivedMessage = (() => {
-    const incoming = chatMessages.filter((m) => m.direction === "incoming");
-    if (incoming.length === 0) return null;
-    const latest = incoming[incoming.length - 1];
-    return latest.status === "received" ? latest : null;
-  })();
+  const latestReceivedMessage = [...chatMessages].reverse().find(m => m.direction === "incoming" && m.source === "karmaprops" && m.status === "received") || null;
 
   const handleGenerateReply = async () => {
     if (!latestReceivedMessage?.messageId) return;
@@ -522,25 +517,6 @@ export default function Dashboard() {
               })
             )}
             <div ref={chatEndRef} />
-
-            {/* Generate AI Reply Button */}
-            {latestReceivedMessage && !pendingMessage && (
-              <div style={{ display: "flex", justifyContent: "center", margin: "16px 0" }}>
-                <button
-                  onClick={handleGenerateReply}
-                  disabled={generating}
-                  style={{
-                    background: "#00a884", color: "#111b21", padding: "10px 24px", borderRadius: 8,
-                    border: "none", fontWeight: 600, fontSize: 14, cursor: generating ? "default" : "pointer",
-                    fontFamily: "inherit", opacity: generating ? 0.7 : 1, transition: "opacity 0.15s",
-                  }}
-                  onMouseEnter={(e) => { if (!generating) e.currentTarget.style.opacity = "0.85"; }}
-                  onMouseLeave={(e) => { if (!generating) e.currentTarget.style.opacity = "1"; }}
-                >
-                  {generating ? "⏳ Generating..." : "🤖 Generate AI Reply"}
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Bottom Bar */}
@@ -576,10 +552,30 @@ export default function Dashboard() {
                 )}
               </div>
             </div>
+          ) : latestReceivedMessage && !pendingMessage ? (
+            <div style={{ background: "#202c33", borderTop: "1px solid #2a3942", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ flex: 1, minWidth: 0, color: "#8696a0", fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 12 }}>
+                Reply to: {latestReceivedMessage.text?.slice(0, 50)}{(latestReceivedMessage.text?.length || 0) > 50 ? "..." : ""}
+              </div>
+              <button
+                onClick={handleGenerateReply}
+                disabled={generating}
+                style={{
+                  background: "#00a884", color: "#111b21", padding: "10px 20px", borderRadius: 8,
+                  border: "none", fontWeight: 600, fontSize: 14, cursor: generating ? "default" : "pointer",
+                  fontFamily: "inherit", display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
+                  opacity: generating ? 0.7 : 1, transition: "opacity 0.15s",
+                }}
+                onMouseEnter={(e) => { if (!generating) e.currentTarget.style.opacity = "0.85"; }}
+                onMouseLeave={(e) => { if (!generating) e.currentTarget.style.opacity = "1"; }}
+              >
+                {generating ? "⏳ Generating..." : "🤖 Generate Reply"}
+              </button>
+            </div>
           ) : (
-            <div style={{ background: "#202c33", borderTop: "1px solid #2a3942", padding: "10px 16px", display: "flex", alignItems: "center", height: 62 }}>
+            <div style={{ background: "#202c33", borderTop: "1px solid #2a3942", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 62 }}>
               <div style={{ flex: 1, background: "#2a3942", borderRadius: 8, padding: "9px 14px", color: "#8696a0", fontSize: 14 }}>
-                AI will auto-generate replies to incoming messages
+                No new messages to reply to
               </div>
             </div>
           )}

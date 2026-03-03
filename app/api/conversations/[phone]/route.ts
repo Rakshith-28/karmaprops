@@ -42,7 +42,8 @@ export async function GET(
         direction: "incoming",
         timestamp: m.createdAt,
         source: "karmaprops",
-        status: "delivered",
+        status: m.status === "received" ? "received" : "delivered",
+        messageId: m.id,
       });
       if (m.aiReply) {
         msgs.push({
