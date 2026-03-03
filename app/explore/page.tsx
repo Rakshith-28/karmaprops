@@ -214,6 +214,18 @@ export default function ExplorePage() {
     setChatLoading(false);
   };
 
+  // Load chat history on mount
+  useEffect(() => {
+    fetch("/api/explore-chat")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.messages) {
+          setChatMessages(data.messages.map((m: any) => ({ role: m.role, text: m.message })));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
@@ -486,7 +498,19 @@ export default function ExplorePage() {
               <span style={{ fontSize: 18 }}>🤖</span>
               <span style={{ fontSize: 16, fontWeight: 500, color: "#e9edef" }}>AI Assistant</span>
             </div>
-            <button onClick={() => setChatOpen(false)} style={{ background: "none", border: "none", color: "#8696a0", cursor: "pointer", fontSize: 18 }}>✕</button>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                onClick={async () => {
+                  await fetch("/api/explore-chat", { method: "DELETE" });
+                  setChatMessages([]);
+                }}
+                style={{ background: "none", border: "none", color: "#8696a0", cursor: "pointer", fontSize: 12 }}
+                title="Clear chat history"
+              >
+                Clear
+              </button>
+              <button onClick={() => setChatOpen(false)} style={{ background: "none", border: "none", color: "#8696a0", cursor: "pointer", fontSize: 18 }}>✕</button>
+            </div>
           </div>
 
           {/* Chat Messages */}
