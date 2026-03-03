@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import Navbar from "../components/Navbar";
 
 // ─── Types ───
 type ConversationSummary = {
@@ -306,7 +307,9 @@ export default function Dashboard() {
   ];
 
   return (
-    <div style={{ display: "flex", height: "100vh", width: "100vw", background: "#111b21", fontFamily: "'Segoe UI', Helvetica, Arial, sans-serif", color: "#e9edef", overflow: "hidden" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#111b21" }}>
+      <Navbar />
+      <div style={{ display: "flex", flex: 1, overflow: "hidden", width: "100vw", background: "#111b21", fontFamily: "'Segoe UI', Helvetica, Arial, sans-serif", color: "#e9edef" }}>
 
       {/* ═══ LEFT PANEL ═══ */}
       <div style={{ width: 420, minWidth: 420, borderRight: "1px solid #2a3942", display: "flex", flexDirection: "column", background: "#111b21" }}>
@@ -554,6 +557,7 @@ export default function Dashboard() {
       )}
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      </div>
     </div>
   );
 }

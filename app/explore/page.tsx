@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Navbar from "../components/Navbar";
 
 // ─── Types ───
 type Section = "overview" | "properties" | "tenants" | "prospects" | "owners" | "vendors" | "leases" | "tasks";
@@ -424,7 +425,9 @@ export default function ExplorePage() {
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh", width: "100vw", background: "#111b21", fontFamily: "'Segoe UI', Helvetica, Arial, sans-serif", color: "#e9edef", overflow: "hidden" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#111b21" }}>
+      <Navbar />
+      <div style={{ display: "flex", flex: 1, overflow: "hidden", width: "100vw", background: "#111b21", fontFamily: "'Segoe UI', Helvetica, Arial, sans-serif", color: "#e9edef" }}>
 
       {/* ═══ SIDEBAR ═══ */}
       <div style={{ width: 220, minWidth: 220, background: "#202c33", borderRight: "1px solid #2a3942", display: "flex", flexDirection: "column" }}>
@@ -565,6 +568,7 @@ export default function ExplorePage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
