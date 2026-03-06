@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getQuoMessages, getQuoGroupMessages, getAllQuoContacts } from "@/lib/quo";
+import { getQuoMessages, getAllQuoContacts } from "@/lib/quo";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(
@@ -11,6 +11,16 @@ export async function GET(
     const decodedPhone = decodeURIComponent(phone);
     const conversationId = request.nextUrl.searchParams.get("conversationId");
 
+    // Check if this is a group conversation
+    let isGroup = false;
+    if (conversationId) {
+      const groupCheck = await prisma.message.findFirst({
+        where: { conversationId },
+        select: { isGroup: true },
+      });
+      isGroup = groupCheck?.isGroup || false;
+    }
+
     // Load Quo contacts for name resolution
     let quoContacts: Record<string, string> = {};
     try {
@@ -19,44 +29,31 @@ export async function GET(
       console.warn("Failed to load Quo contacts:", err);
     }
 
-    // 1. Fetch from Quo/OpenPhone
     let quoMessages: any[] = [];
-    try {
-      let raw: any[] = [];
 
-      if (conversationId) {
-        // For groups: get participants from DB, then fetch by all participants
-        const groupMsg = await prisma.message.findFirst({
-          where: { conversationId },
-          select: { participants: true },
-        });
-
-        if (groupMsg && groupMsg.participants.length > 1) {
-          raw = await getQuoGroupMessages(groupMsg.participants, 100);
-        } else {
-          raw = await getQuoMessages(decodedPhone, 100);
-        }
-      } else {
-        raw = await getQuoMessages(decodedPhone, 100);
+    // For 1-on-1: fetch from Quo API (full history including manual messages)
+    if (!isGroup) {
+      try {
+        const raw = await getQuoMessages(decodedPhone, 100);
+        quoMessages = raw
+          .filter((m) => m.text || (m as any).media?.length > 0)
+          .map((m) => ({
+            id: m.id,
+            text: m.text || "📎 Image/Media",
+            direction: m.direction,
+            timestamp: m.createdAt,
+            source: "quo",
+            status: m.direction === "outgoing" ? "sent" : "delivered",
+            fromPhone: m.from,
+            callerName: quoContacts[m.from] || null,
+          }));
+      } catch (err) {
+        console.warn("Failed to load Quo messages:", err);
       }
-
-      quoMessages = raw
-        .filter((m) => m.text || (m as any).media?.length > 0)
-        .map((m) => ({
-          id: m.id,
-          text: m.text || "📎 Image/Media",
-          direction: m.direction,
-          timestamp: m.createdAt,
-          source: "quo",
-          status: m.direction === "outgoing" ? "sent" : "delivered",
-          fromPhone: m.from,
-          callerName: quoContacts[m.from] || null,
-        }));
-    } catch (err) {
-      console.warn("Failed to load Quo messages:", err);
     }
+    // For groups: skip Quo API — only use DB messages (webhook data)
 
-    // 2. Fetch from KarmaProps DB
+    // Fetch from KarmaProps DB
     const dbMessages = await prisma.message.findMany({
       where: conversationId
         ? { conversationId }
@@ -91,12 +88,11 @@ export async function GET(
       return msgs;
     });
 
-    // 3. Merge, deduplicate, and sort
+    // Merge, deduplicate, and sort
     const allMessages = [...quoMessages, ...dbFormatted];
     const deduped: any[] = [];
     const seen = new Set<string>();
 
-    // First pass: add all DB messages and mark them
     for (const msg of allMessages) {
       if (msg.source === "karmaprops") {
         const key = `${msg.text.slice(0, 50).trim().toLowerCase()}-${msg.direction}`;
@@ -105,7 +101,6 @@ export async function GET(
       }
     }
 
-    // Second pass: add Quo messages only if not already covered by DB
     for (const msg of allMessages) {
       if (msg.source === "quo") {
         const key = `${msg.text.slice(0, 50).trim().toLowerCase()}-${msg.direction}`;
@@ -118,7 +113,6 @@ export async function GET(
 
     deduped.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-    // 4. Get caller info
     const phoneLast10 = decodedPhone.replace(/\D/g, "").slice(-10);
     const person = await prisma.people.findFirst({
       where: {

@@ -7,10 +7,44 @@ export async function POST(request: NextRequest) {
   try {
     const event = await request.json();
 
-    if (event.type !== "message.received") {
+    if (event.type !== "message.received" && event.type !== "message.delivered") {
       return Response.json({ message: "ignored" });
     }
 
+    // For outgoing messages (manual sends), just save to DB for history
+    if (event.type === "message.delivered") {
+      const data = event.data.object;
+      const conversationId = data.conversationId || null;
+
+      if (conversationId && data.body) {
+        const existingGroup = await prisma.message.findFirst({
+          where: { conversationId, isGroup: true },
+          select: { participants: true, groupName: true },
+        });
+
+        if (existingGroup) {
+          await prisma.message.create({
+            data: {
+              fromPhone: data.from,
+              toPhone: Array.isArray(data.to) ? data.to.join(",") : data.to,
+              incomingMessage: data.body,
+              status: "sent",
+              conversationId,
+              participants: existingGroup.participants,
+              isGroup: true,
+              groupName: existingGroup.groupName,
+              callerType: "outgoing",
+              callerName: "KPMS",
+            },
+          });
+          console.log(`[WEBHOOK] Saved manual outgoing group message: ${conversationId}`);
+        }
+      }
+
+      return Response.json({ success: true });
+    }
+
+    // Handle incoming messages
     const data = event.data.object;
     const incomingMessage = data.body;
     const fromPhone = data.from;
@@ -19,6 +53,7 @@ export async function POST(request: NextRequest) {
 
     let participants: string[] = [fromPhone];
     let isGroup = false;
+    let groupName: string | null = null;
 
     // If we have a conversationId, look up the full participant list from Quo
     if (conversationId) {
@@ -27,7 +62,7 @@ export async function POST(request: NextRequest) {
         if (convo && convo.participants && convo.participants.length > 1) {
           participants = convo.participants;
           isGroup = true;
-          var groupName = convo.name || null;
+          groupName = convo.name || null;
           console.log(`[WEBHOOK] Group conversation detected: ${conversationId} with ${participants.length} participants`);
         }
       } catch (err) {
@@ -38,7 +73,7 @@ export async function POST(request: NextRequest) {
       if (!isGroup) {
         const prevMessages = await prisma.message.findMany({
           where: { conversationId },
-          select: { participants: true, isGroup: true },
+          select: { participants: true, isGroup: true, groupName: true },
           take: 1,
           orderBy: { createdAt: "desc" },
         });
@@ -46,6 +81,7 @@ export async function POST(request: NextRequest) {
         if (prevMessages.length > 0 && prevMessages[0].isGroup) {
           participants = prevMessages[0].participants;
           isGroup = true;
+          groupName = prevMessages[0].groupName;
         }
       }
     }
@@ -75,7 +111,7 @@ export async function POST(request: NextRequest) {
         conversationId,
         participants,
         isGroup,
-        groupName: isGroup ? (typeof groupName !== 'undefined' ? groupName : null) : null,
+        groupName,
         callerType: response.callerType,
         callerName: response.callerName || null,
       },
