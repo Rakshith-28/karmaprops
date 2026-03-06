@@ -15,6 +15,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         },
       });
 
+      // Determine recipients: all participants for group, just sender for 1-on-1
+      const recipients = message.isGroup && message.participants.length > 0
+        ? message.participants
+        : [message.fromPhone];
+
       // Send via Quo API
       const quoResponse = await fetch("https://api.openphone.com/v1/messages", {
         method: "POST",
@@ -25,7 +30,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         body: JSON.stringify({
           content: message.aiReply,
           from: process.env.QUO_FROM_NUMBER!,
-          to: [message.fromPhone],
+          to: recipients,
         }),
       });
 
@@ -40,6 +45,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         data: { status: "sent" },
       });
 
+      console.log(`Sent ${message.isGroup ? "GROUP" : "1-on-1"} reply to ${recipients.join(", ")}`);
       return Response.json({ success: true, status: "sent" });
 
     } else if (action === "reject") {
@@ -51,7 +57,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     return Response.json({ error: "Invalid action" }, { status: 400 });
-
   } catch (error: any) {
     console.error("Message action error:", error.message);
     return Response.json({ error: error.message }, { status: 500 });

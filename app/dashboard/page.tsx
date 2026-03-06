@@ -5,13 +5,15 @@ import Navbar from "../components/Navbar";
 
 // ─── Types ───
 type ConversationSummary = {
+  conversationId: string;
   phone: string;
   callerName: string | null;
   callerType: string;
-  lastMessage: string;
-  lastTimestamp: string;
+  lastActivityAt: string;
   pendingCount: number;
-  totalMessages: number;
+  isGroup: boolean;
+  participants: string[];
+  groupName: string | null;
 };
 
 type ChatMessage = {
@@ -22,6 +24,8 @@ type ChatMessage = {
   source: "quo" | "karmaprops";
   status: string;
   messageId?: string;
+  fromPhone?: string;
+  callerName?: string;
 };
 
 // ─── Helpers ───
@@ -135,6 +139,7 @@ function DateSeparator({ date }: { date: string }) {
 export default function Dashboard() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
   const [filter, setFilter] = useState("all");
@@ -144,60 +149,21 @@ export default function Dashboard() {
   const [syncing, setSyncing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const [quoContacts, setQuoContacts] = useState<Record<string, string>>({});
 
-  // ─── Fetch conversation list from /api/messages ───
+  // ─── Fetch conversation list from Quo API ───
   const fetchConversations = useCallback(async () => {
     try {
-      const res = await fetch("/api/messages");
+      const res = await fetch("/api/quo-conversations");
       if (!res.ok) return;
       const data = await res.json();
-      const msgs = data.messages || [];
-
-      // Group by phone
-      const grouped: Record<string, any[]> = {};
-      for (const m of msgs) {
-        if (!grouped[m.fromPhone]) grouped[m.fromPhone] = [];
-        grouped[m.fromPhone].push(m);
-      }
-
-      const convos: ConversationSummary[] = Object.entries(grouped).map(([phone, messages]) => {
-        const sorted = messages.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        const latest = sorted[0];
-        const pendingCount = messages.filter((m: any) => m.status === "pending" || m.status === "received").length;
-
-        return {
-          phone,
-          callerName: latest.callerName || quoContacts[phone] || null,
-          callerType: latest.callerType || "prospect",
-          lastMessage: latest.incomingMessage || "",
-          lastTimestamp: latest.createdAt,
-          pendingCount,
-          totalMessages: messages.length,
-        };
-      });
-
-      // Sort: pending first, then by timestamp
-      convos.sort((a, b) => {
-        if (a.pendingCount > 0 && b.pendingCount === 0) return -1;
-        if (b.pendingCount > 0 && a.pendingCount === 0) return 1;
-        return new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime();
-      });
-
-      setConversations(convos);
+      setConversations(data.conversations || []);
     } catch (err) {
       console.warn("Failed to fetch conversations:", err);
     }
   }, []);
 
-  // Fetch Quo contacts and sync names into DB on load
+  // Sync Quo contact names into DB on load
   useEffect(() => {
-    fetch("/api/contacts")
-      .then((res) => res.json())
-      .then((data) => setQuoContacts(data.contacts || {}))
-      .catch(() => {});
-    
-    // Sync Quo contact names into Message table
     fetch("/api/sync-contacts", { method: "POST" }).catch(() => {});
   }, []);
 
@@ -209,10 +175,13 @@ export default function Dashboard() {
   }, [fetchConversations]);
 
   // ─── Fetch full chat history when selecting a conversation ───
-  const loadChat = useCallback(async (phone: string) => {
+  const loadChat = useCallback(async (phone: string, conversationId?: string | null) => {
     setChatLoading(true);
     try {
-      const res = await fetch(`/api/conversations/${encodeURIComponent(phone)}`);
+      const endpoint = conversationId
+        ? `/api/conversations/${encodeURIComponent(phone)}?conversationId=${encodeURIComponent(conversationId)}`
+        : `/api/conversations/${encodeURIComponent(phone)}`;
+      const res = await fetch(endpoint);
       if (!res.ok) throw new Error("Failed to load");
       const data = await res.json();
       setChatMessages(data.messages || []);
@@ -230,8 +199,8 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    if (selectedPhone) loadChat(selectedPhone);
-  }, [selectedPhone, loadChat]);
+    if (selectedPhone) loadChat(selectedPhone, selectedConversationId);
+  }, [selectedPhone, selectedConversationId, loadChat]);
 
   // Auto-scroll
   useEffect(() => {
@@ -253,8 +222,7 @@ export default function Dashboard() {
           editedReply: editMode ? editingReply : undefined,
         }),
       });
-      // Refresh
-      if (selectedPhone) loadChat(selectedPhone);
+      if (selectedPhone) loadChat(selectedPhone, selectedConversationId);
       fetchConversations();
     } catch (err) {
       console.error("Approve failed:", err);
@@ -271,7 +239,7 @@ export default function Dashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: pending.messageId, action: "reject" }),
       });
-      if (selectedPhone) loadChat(selectedPhone);
+      if (selectedPhone) loadChat(selectedPhone, selectedConversationId);
       fetchConversations();
     } catch (err) {
       console.error("Reject failed:", err);
@@ -299,7 +267,7 @@ export default function Dashboard() {
     return true;
   });
 
-  const selectedConvo = conversations.find((c) => c.phone === selectedPhone);
+  const selectedConvo = conversations.find((c) => c.conversationId === selectedConversationId);
   const pendingMessage = chatMessages.find((m) => m.status === "pending" && m.direction === "outgoing");
 
   // Find the latest incoming message with status "received" (no AI reply yet)
@@ -315,7 +283,7 @@ export default function Dashboard() {
         body: JSON.stringify({ messageId: latestReceivedMessage.messageId }),
       });
       if (!res.ok) throw new Error("Failed");
-      if (selectedPhone) loadChat(selectedPhone);
+      if (selectedPhone) loadChat(selectedPhone, selectedConversationId);
       fetchConversations();
     } catch (err) {
       console.error("Generate reply failed:", err);
@@ -338,8 +306,6 @@ export default function Dashboard() {
 
       {/* ═══ LEFT PANEL ═══ */}
       <div style={{ width: 420, minWidth: 420, borderRight: "1px solid #2a3942", display: "flex", flexDirection: "column", background: "#111b21" }}>
-
-      
 
         {/* Search */}
         <div style={{ padding: "8px 12px", background: "#111b21"}}>
@@ -380,15 +346,15 @@ export default function Dashboard() {
         <div style={{ flex: 1, overflowY: "auto" }}>
           {filtered.length === 0 && (
             <div style={{ padding: 40, textAlign: "center", color: "#8696a0", fontSize: 14 }}>
-              {conversations.length === 0 ? "No messages yet" : "No conversations match this filter"}
+              {conversations.length === 0 ? "Loading conversations..." : "No conversations match this filter"}
             </div>
           )}
           {filtered.map((convo) => {
-            const isSelected = selectedPhone === convo.phone;
+            const isSelected = selectedConversationId === convo.conversationId;
             return (
               <div
-                key={convo.phone}
-                onClick={() => setSelectedPhone(convo.phone)}
+                key={convo.conversationId}
+                onClick={() => { setSelectedPhone(convo.phone); setSelectedConversationId(convo.conversationId); }}
                 style={{
                   display: "flex", alignItems: "center", padding: "10px 14px", gap: 14, cursor: "pointer",
                   background: isSelected ? "#2a3942" : "transparent", transition: "background 0.1s",
@@ -396,8 +362,15 @@ export default function Dashboard() {
                 onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = "#202c33"; }}
                 onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
               >
-                <div style={{ width: 49, height: 49, borderRadius: "50%", background: getTypeColor(convo.callerType), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 600, color: "#fff", flexShrink: 0 }}>
-                  {getInitials(convo.callerName, convo.phone)}
+                <div style={{ position: "relative" }}>
+                  <div style={{ width: 49, height: 49, borderRadius: "50%", background: getTypeColor(convo.callerType), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 600, color: "#fff", flexShrink: 0 }}>
+                    {convo.isGroup ? "👥" : getInitials(convo.callerName, convo.phone)}
+                  </div>
+                  {convo.isGroup && (
+                    <span style={{ position: "absolute", bottom: -2, right: -2, background: "#00a884", color: "#111b21", fontSize: 9, fontWeight: 700, borderRadius: 8, padding: "1px 5px", border: "2px solid #111b21" }}>
+                      {convo.participants.length}
+                    </span>
+                  )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
@@ -405,12 +378,12 @@ export default function Dashboard() {
                       {convo.callerName || formatPhone(convo.phone)}
                     </span>
                     <span style={{ fontSize: 12, color: convo.pendingCount > 0 ? "#00a884" : "#8696a0", whiteSpace: "nowrap", marginLeft: 8 }}>
-                      {formatTime(convo.lastTimestamp)}
+                      {formatTime(convo.lastActivityAt)}
                     </span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: 14, color: "#8696a0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 240 }}>
-                      {convo.lastMessage}
+                      {convo.isGroup ? `${convo.participants.length} participants` : ""}
                     </span>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                       <span style={{ fontSize: 10, fontWeight: 600, color: getTypeColor(convo.callerType), background: getTypeBg(convo.callerType), padding: "1px 6px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
@@ -431,17 +404,21 @@ export default function Dashboard() {
       </div>
 
       {/* ═══ MIDDLE PANEL ═══ */}
-      {selectedPhone && selectedConvo ? (
+      {selectedConversationId && selectedConvo ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#0b141a" }}>
 
           {/* Chat Header */}
           <div style={{ padding: "10px 16px", background: "#202c33", display: "flex", alignItems: "center", gap: 14, height: 59, borderBottom: "1px solid #2a3942" }}>
             <div style={{ width: 40, height: 40, borderRadius: "50%", background: getTypeColor(selectedConvo.callerType), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 600, color: "#fff", flexShrink: 0 }}>
-              {getInitials(selectedConvo.callerName, selectedConvo.phone)}
+              {selectedConvo.isGroup ? "👥" : getInitials(selectedConvo.callerName, selectedConvo.phone)}
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 16, fontWeight: 500, color: "#e9edef" }}>{selectedConvo.callerName || formatPhone(selectedConvo.phone)}</div>
-              <div style={{ fontSize: 13, color: "#8696a0" }}>{formatPhone(selectedConvo.phone)}</div>
+              <div style={{ fontSize: 16, fontWeight: 500, color: "#e9edef" }}>{selectedConvo.isGroup ? (selectedConvo.groupName || selectedConvo.callerName) : (selectedConvo.callerName || formatPhone(selectedConvo.phone))}</div>
+              <div style={{ fontSize: 13, color: "#8696a0" }}>
+                {selectedConvo.isGroup
+                  ? `Group · ${selectedConvo.participants.map(p => formatPhone(p)).join(", ")}`
+                  : formatPhone(selectedConvo.phone)}
+              </div>
             </div>
             <span style={{ fontSize: 11, fontWeight: 600, color: getTypeColor(selectedConvo.callerType), background: getTypeBg(selectedConvo.callerType), padding: "3px 10px", borderRadius: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>
               {getTypeLabel(selectedConvo.callerType)}
@@ -468,6 +445,11 @@ export default function Dashboard() {
                 const isPending = msg.status === "pending";
                 const isRejected = msg.status === "rejected";
 
+                // For group chats, show sender name on incoming messages
+                const showSender = selectedConvo?.isGroup && !isOutgoing;
+                const prevMsg = i > 0 ? chatMessages.filter(m => m.status !== "rejected")[i - 1] : null;
+                const sameAsPrev = prevMsg && prevMsg.fromPhone === msg.fromPhone && prevMsg.direction === msg.direction;
+
                 let bubbleBg: string;
                 if (isOutgoing) {
                   if (isPending) bubbleBg = "#2a2a12";
@@ -491,6 +473,11 @@ export default function Dashboard() {
                         {(isPending || isRejected) && (
                           <div style={{ display: "inline-block", fontSize: 10, fontWeight: 700, color: isPending ? "#f59e0b" : "#ef4444", background: isPending ? "rgba(245,158,11,0.15)" : "rgba(239,68,68,0.15)", padding: "1px 6px", borderRadius: 4, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
                             {isPending ? "⏳ Pending Approval" : "✗ Rejected"}
+                          </div>
+                        )}
+                        {showSender && !sameAsPrev && (
+                          <div style={{ fontSize: 12, fontWeight: 600, color: getTypeColor("prospect"), marginBottom: 2 }}>
+                            {msg.callerName || formatPhone(msg.fromPhone || "")}
                           </div>
                         )}
                         <div style={{ fontSize: 14.2, lineHeight: "19px", color: isRejected ? "#8696a0" : "#e9edef", whiteSpace: "pre-wrap", wordBreak: "break-word", textDecoration: isRejected ? "line-through" : "none", opacity: isRejected ? 0.6 : 1 }}>

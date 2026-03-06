@@ -366,26 +366,31 @@ Company: ${person.notes || "N/A"}`;
 }
 
 // ─── Get conversation history (KarmaProps DB + Quo/OpenPhone) ───
-async function getConversationHistory(phone: string) {
+async function getConversationHistory(key: string) {
   let history = "";
 
   // 1. Try fetching from Quo/OpenPhone (old + manual conversations)
   try {
-    const quoMessages = await getQuoMessages(phone, 50);
+    const quoMessages = await getQuoMessages(key, 50);
     const quoHistory = formatQuoHistory(quoMessages, process.env.QUO_FROM_NUMBER || "");
 
     if (quoHistory) {
       history += quoHistory;
-      console.log(`[HISTORY] Loaded ${quoMessages.length} messages from Quo for ${phone}`);
+      console.log(`[HISTORY] Loaded ${quoMessages.length} messages from Quo for ${key}`);
     }
   } catch (error) {
     console.warn("Failed to load Quo history:", error);
   }
 
-  // 2. Also load KarmaProps DB messages (AI-generated ones)
+  // 2. Load KarmaProps DB messages — try conversationId first, then phone
   try {
     const dbMessages = await prisma.message.findMany({
-      where: { fromPhone: phone },
+      where: {
+        OR: [
+          { conversationId: key },
+          { fromPhone: key },
+        ],
+      },
       orderBy: { createdAt: "asc" },
       take: 50,
     });

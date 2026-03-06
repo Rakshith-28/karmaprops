@@ -167,3 +167,53 @@ export async function getAllQuoContacts(): Promise<Record<string, string>> {
 
   return nameMap;
 }
+
+// Fetch a single conversation by ID to get participants
+export async function getConversation(conversationId: string): Promise<any> {
+  const params = new URLSearchParams({
+    phoneNumberId: QUO_PHONE_NUMBER_ID,
+    maxResults: "100",
+  });
+  
+  const data = await quoFetch(`/conversations?${params.toString()}`);
+  return data.data?.find((c: any) => c.id === conversationId) || null;
+}
+
+// Fetch messages for a conversation by participant phones (for groups)
+// Fetch messages for a group conversation by fetching each participant separately
+export async function getQuoGroupMessages(
+  participantPhones: string[],
+  limit: number = 100
+): Promise<QuoMessage[]> {
+  const allMessages: QuoMessage[] = [];
+  const seenIds = new Set<string>();
+
+  // Fetch messages for each participant separately and merge
+  for (const phone of participantPhones) {
+    try {
+      const params = new URLSearchParams({
+        phoneNumberId: QUO_PHONE_NUMBER_ID,
+        "participants[]": phone,
+        maxResults: String(Math.min(50, limit)),
+      });
+
+      const data: QuoListResponse = await quoFetch(`/messages?${params.toString()}`);
+
+      for (const msg of data.data) {
+        if (!seenIds.has(msg.id)) {
+          seenIds.add(msg.id);
+          allMessages.push(msg);
+        }
+      }
+
+      // Rate limit
+      await new Promise((r) => setTimeout(r, 150));
+    } catch (err) {
+      console.warn(`Failed to fetch messages for ${phone}:`, err);
+    }
+  }
+
+  return allMessages.sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+}

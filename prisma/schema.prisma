@@ -20,6 +20,10 @@ model Message {
   callerType      String?
   callerName      String?
   tenantId        String?
+  conversationId  String?
+participants    String[]
+isGroup         Boolean  @default(false)
+groupName       String?
 }
 
 model Property {
