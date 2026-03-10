@@ -123,9 +123,8 @@ export async function GET(request: NextRequest) {
     });
 
     // Sort: pending first, then by last activity
+   // Sort by last activity time (most recent first), like Quo does
     conversations.sort((a, b) => {
-      if (a.pendingCount > 0 && b.pendingCount === 0) return -1;
-      if (b.pendingCount > 0 && a.pendingCount === 0) return 1;
       return new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime();
     });
 
