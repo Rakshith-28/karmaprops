@@ -17,10 +17,29 @@ export async function POST(request: NextRequest) {
       const conversationId = data.conversationId || null;
 
       if (conversationId && data.body) {
-        const existingGroup = await prisma.message.findFirst({
+        // Check if group exists in DB
+        let existingGroup = await prisma.message.findFirst({
           where: { conversationId, isGroup: true },
           select: { participants: true, groupName: true },
         });
+
+        // If not in DB yet, look up from Quo conversations API
+        if (!existingGroup) {
+          try {
+            const convo = await getConversation(conversationId);
+            const quoNumber = process.env.QUO_FROM_NUMBER;
+            if (convo && convo.participants && convo.participants.length > 1) {
+              const participants = quoNumber
+                ? convo.participants.filter((p: string) => p !== quoNumber)
+                : convo.participants;
+              if (participants.length > 1) {
+                existingGroup = { participants, groupName: convo.name || null };
+              }
+            }
+          } catch (err) {
+            console.warn("[WEBHOOK] Failed to fetch conversation:", err);
+          }
+        }
 
         if (existingGroup) {
           await prisma.message.create({
